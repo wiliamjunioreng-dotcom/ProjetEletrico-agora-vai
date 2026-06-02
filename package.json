@@ -1,0 +1,96 @@
+{
+  "name": "projeletrico",
+  "private": true,
+  "version": "2.1.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "dist:win": "npm run build && npx electron-builder --win --x64 --publish never",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "dxf-parser": "^1.1.2",
+    "express": "^5.2.1",
+    "lucide-react": "^1.14.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.13"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.12.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.5.0",
+    "pkg": "^5.8.1",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.58.2",
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5"
+  },
+  "description": "ProjetEletrico — Motor NBR 5410 + CEMIG ND-5.1",
+  "author": {
+    "name": "Wiliam A. S. Junior",
+    "email": "crea@projeletrico.eng.br"
+  },
+  "main": "electron/main.js",
+  "build": {
+    "appId": "br.eng.projeletrico",
+    "productName": "ProjetEletrico",
+    "copyright": "Copyright 2026 Wiliam A. S. Junior",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "gerar_qdfl.py",
+      "server.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ProjetEletrico"
+    },
+    "portable": {
+      "artifactName": "ProjetEletrico-Portatil.exe"
+    },
+    "extraFiles": [
+      {
+        "from": "gerar_qdfl.py",
+        "to": "gerar_qdfl.py"
+      }
+    ]
+  }
+}

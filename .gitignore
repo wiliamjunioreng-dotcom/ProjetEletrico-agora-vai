@@ -1,0 +1,7 @@
+node_modules/
+dist/
+release/
+.vite/
+*.log
+assets/icon.ico
+assets/installer-header.bmp

@@ -1,0 +1,116 @@
+name: Build ProjetEletrico.exe
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      # ── Node.js com cache npm ───────────────────────────────────
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── Cache dos binarios do Electron ──────────────────────────
+      # Evita re-download de ~100MB a cada build
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-win-${{ hashFiles('package.json') }}
+          restore-keys: |
+            electron-win-
+
+      # ── Instalar dependencias (sem redownload do Electron) ──────
+      # O electron binario ja esta no cache — skip do postinstall
+      - name: Instalar dependencias npm
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      # ── Verificar que o dist nao existe antes do build ──────────
+      - name: Limpar dist anterior
+        run: |
+          if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
+          Write-Host "dist limpo"
+
+      # ── Build React + TypeScript ────────────────────────────────
+      - name: Build React e TypeScript
+        run: npm run build
+
+      # ── Verificar que o dist foi gerado corretamente ────────────
+      - name: Verificar dist/index.html
+        run: |
+          if (-not (Test-Path "dist/index.html")) {
+            Write-Error "ERRO: dist/index.html nao encontrado — build falhou"
+            exit 1
+          }
+          $files = (Get-ChildItem dist -Recurse | Measure-Object).Count
+          Write-Host "dist OK: $files arquivos gerados"
+          Get-ChildItem dist/assets | Select-Object Name, Length
+
+      # ── Empacotar .exe com electron-builder ────────────────────
+      - name: Empacotar .exe com electron-builder
+        run: npx electron-builder --win --x64 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Redirecionar cache do electron-builder para o cache do runner
+          ELECTRON_CACHE: ${{ github.workspace }}/.electron-cache
+          ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.electron-builder-cache
+
+      # ── Listar executaveis gerados ──────────────────────────────
+      - name: Listar .exe gerados
+        run: |
+          Write-Host "=== Arquivos em dist-electron ==="
+          if (Test-Path "dist-electron") {
+            Get-ChildItem dist-electron -Recurse -Include "*.exe" |
+              Select-Object Name, @{N='Tamanho(MB)';E={[math]::Round($_.Length/1MB, 1)}}
+          } else {
+            Write-Warning "dist-electron nao encontrado"
+          }
+
+      # ── Upload: Instalador NSIS ─────────────────────────────────
+      - name: Upload instalador (Setup.exe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProjetEletrico-Setup-Windows-x64
+          path: dist-electron/*Setup*.exe
+          retention-days: 30
+          if-no-files-found: warn
+
+      # ── Upload: Portatil ────────────────────────────────────────
+      - name: Upload portatil (.exe unico)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProjetEletrico-Portatil-Windows-x64
+          path: dist-electron/*Portatil*.exe
+          retention-days: 30
+          if-no-files-found: warn
+
+      # ── Resumo ──────────────────────────────────────────────────
+      - name: Resumo do build
+        if: always()
+        run: |
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "  ProjetEletrico v$((Get-Content package.json | ConvertFrom-Json).version)"
+          Write-Host "  Build: ${{ job.status }}"
+          Write-Host "============================================"
+          if (Test-Path "dist-electron") {
+            Get-ChildItem dist-electron -Recurse -Include "*.exe" | ForEach-Object {
+              Write-Host "  $($_.Name) - $([math]::Round($_.Length/1MB, 1))MB"
+            }
+          }
