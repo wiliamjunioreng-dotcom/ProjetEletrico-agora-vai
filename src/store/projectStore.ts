@@ -197,6 +197,7 @@ export function comprimentoEstimado(tipoComodo: string, tipoCircuito: 'ILUM' | '
 const projetoDefault: ProjectState['projeto'] = {
   id:                crypto.randomUUID(),
   nome:              'Novo Projeto',
+  empresa:           'Lumen Soluções',
   endereco:          '',
   projetista:        '',
   crea:              '',
@@ -446,14 +447,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // TUE
     comodos_auto.forEach(c => {
       ;(c.tues ?? []).forEach(t => {
-        // Inferir ligação pela potência
-        const ligacao = inferirLigacao('TUE', t.potencia_va)
+        // Ligação: respeita a seleção EXPLÍCITA do engenheiro (t.fase_ligacao)
+        // quando informada — só cai para inferência automática por potência
+        // quando o engenheiro não declarou. Autoridade do projetista > heurística.
+        const ligacao = t.fase_ligacao === 'tri' ? 'trifasica'
+                       : t.fase_ligacao === 'bi'  ? 'bifasica'
+                       : t.fase_ligacao === 'mono' ? 'monofasica'
+                       : inferirLigacao('TUE', t.potencia_va)
         const fasesDisp = fasesParaTipo(ligacao, projeto.sistema)
         const fase: FaseType = fasesDisp[fi++ % fasesDisp.length]
         // Comprimento estimado pelo tipo de ambiente (refinável pelo engenheiro)
         const comp = c.tipo === 'Externo' || c.tipo === 'Garagem' ? 20 : 12
+        // Anexar tipo_carga à descrição como palavra-chave para inferirCurva()
+        // reconhecer corretamente (motor→D, resistivo→B, etc.) — sem isso a
+        // seleção do engenheiro no formulário era descartada silenciosamente.
+        const sufixo_tipo = t.tipo_carga && t.tipo_carga !== 'geral' ? ` (${t.tipo_carga})` : ''
         circs.push({
-          id: crypto.randomUUID(), descricao: `TUE: ${t.descricao} (${c.nome})`,
+          id: crypto.randomUUID(), descricao: `TUE: ${t.descricao}${sufixo_tipo} (${c.nome})`,
           potencia_va: t.potencia_va, fase, ligacao,
           comprimento_m: comp, n_agrup: 1, tipo: 'TUE', comodo_id: c.id,
         })
@@ -514,7 +524,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { circuitos_raw, projeto, rede } = get()
     // Calcular legado (compatibilidade com páginas existentes)
     const calc = circuitos_raw.map(r => calcCircuito(r, projeto))
-    const dem  = calcularDemanda(calc, projeto.v_fase, projeto.fp_global)
+    const dem  = calcularDemanda(calc, projeto.v_fase, projeto.fp_global, projeto.sistema)
     // Solver determinístico puro (novo — não muta domínio)
     const estado = solve({
       projeto: {
@@ -560,6 +570,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           isolacao: projeto.isolacao as any, material: projeto.material_cabo as any,
           t_amb: projeto.t_amb, du_max_pct: projeto.du_max_pct,
           du_ramal_pct: projeto.du_ramal_pct, icc_rede_ka: projeto.icc_rede_ka,
+          v_linha_ref: projeto.v_linha,
         })
         return p.execution.confianca !== 'inviavel'
       } catch { return false }

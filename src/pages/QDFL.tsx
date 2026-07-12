@@ -65,6 +65,7 @@ export function QDFL() {
   function handlePrancha() {
     abrirPranchaInternal({
       projeto_nome: projeto.nome || 'Sem nome',
+      empresa: (projeto as any).empresa || '',
       projetista: (projeto as any).projetista || '—',
       crea: (projeto as any).crea || '—',
       data: new Date().toLocaleDateString('pt-BR'),

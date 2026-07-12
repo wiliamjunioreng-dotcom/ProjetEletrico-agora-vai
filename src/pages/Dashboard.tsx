@@ -2,7 +2,7 @@
 import { useProjectStore } from '../store/projectStore'
 
 export function Dashboard() {
-  const { projeto, circuitos_calc, demanda, setPagina } = useProjectStore()
+  const { projeto, circuitos_calc, demanda, setPagina, comodos } = useProjectStore()
   const ci = circuitos_calc.filter(c => c.potencia_va > 0)
   const n_ok   = ci.filter(c => c.status === 'OK').length
   const n_err  = ci.filter(c => c.status === 'ERRO').length
@@ -36,6 +36,39 @@ export function Dashboard() {
 
   const passo = (projeto as any).nome === 'Novo Projeto' || !ci.length
 
+  // ── Roteiro do projeto: detecta em que etapa o engenheiro está ──
+  // Guia visual para o fluxo completo — especialmente útil para quem
+  // está aprendendo ou usa o programa pela primeira vez.
+  const p: any = projeto
+  const etapas = [
+    {
+      id: 'projeto', label: '1. Dados do projeto', pagina: 'projeto',
+      feito: !!p.nome && p.nome !== 'Novo Projeto' && !!p.projetista && !!p.crea,
+      dica: 'Nome da obra, responsável técnico, CREA, tensão e concessionária',
+    },
+    {
+      id: 'comodos', label: '2. Cômodos e cargas', pagina: 'comodos',
+      feito: comodos.length > 0,
+      dica: 'Cadastre os cômodos com área e perímetro — as cargas mínimas da NBR 5410 §9.5.2 são calculadas automaticamente',
+    },
+    {
+      id: 'circuitos', label: '3. Circuitos', pagina: 'circuitos',
+      feito: ci.length > 0,
+      dica: 'Gere os circuitos a partir dos cômodos ou crie manualmente — seção, disjuntor e queda são dimensionados pela norma',
+    },
+    {
+      id: 'auditoria', label: '4. Auditoria', pagina: 'auditoria',
+      feito: ci.length > 0 && n_err === 0,
+      dica: 'Revise as violações normativas e corrija com 1 clique — nada deve ficar vermelho antes de emitir',
+    },
+    {
+      id: 'emissao', label: '5. Emissão', pagina: 'qdfl',
+      feito: false,  // etapa final — sempre disponível como próximo destino
+      dica: 'Exporte QDFL, memorial descritivo, prancha PDF e lista de materiais',
+    },
+  ]
+  const etapa_atual = etapas.find(e => !e.feito) ?? etapas[etapas.length - 1]
+
   return (<>
     <div className="page-header">
       <div>
@@ -57,6 +90,42 @@ export function Dashboard() {
           </>
         )}
       </div>
+    </div>
+
+    {/* ── Roteiro do projeto — orientação passo a passo ─────────── */}
+    <div style={{
+      display: 'flex', gap: 0, marginBottom: 16, borderRadius: 10,
+      border: '1px solid var(--border)', overflow: 'hidden', background: 'var(--surface2)',
+    }}>
+      {etapas.map((e, i) => {
+        const atual = e.id === etapa_atual.id
+        return (
+          <button key={e.id}
+            onClick={() => setPagina(e.pagina as any)}
+            title={e.dica}
+            style={{
+              flex: 1, padding: '10px 8px', border: 'none', cursor: 'pointer',
+              background: atual ? 'var(--blue)' : e.feito ? 'var(--surface3)' : 'transparent',
+              color: atual ? 'white' : e.feito ? 'var(--green)' : 'var(--text3)',
+              fontSize: 11, fontWeight: atual ? 700 : 500,
+              borderRight: i < etapas.length - 1 ? '1px solid var(--border)' : 'none',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+              transition: 'background .15s',
+            }}>
+            <span style={{ fontSize: 13 }}>{e.feito ? '✓' : atual ? '▶' : '○'}</span>
+            <span>{e.label}</span>
+          </button>
+        )
+      })}
+    </div>
+    {/* Dica contextual da etapa atual */}
+    <div style={{
+      marginBottom: 16, padding: '8px 14px', borderRadius: 8, fontSize: 12,
+      background: 'var(--blue-dim, rgba(37,99,235,.08))', color: 'var(--text2)',
+      border: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center',
+    }}>
+      <span style={{ fontSize: 14 }}>💡</span>
+      <span><b>{etapa_atual.label}:</b> {etapa_atual.dica}</span>
     </div>
 
     {/* KPIs principais */}

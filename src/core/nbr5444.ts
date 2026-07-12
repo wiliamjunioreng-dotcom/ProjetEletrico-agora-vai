@@ -1,363 +1,373 @@
 // src/core/nbr5444.ts
 // ════════════════════════════════════════════════════════════════
-// SIMBOLOGIA NBR 5444 — Biblioteca de símbolos SVG
+// SIMBOLOGIA NBR 5444 — Geometria extraída dos DXFs de referência
+//   doc1 = biblioteca_simbolos.dxf
+//   doc2 = PRJ_ELE_CASA_00.dxf
 //
 // Referência: ABNT NBR 5444:1989 — Símbolos gráficos para instalações elétricas prediais
-// Cada símbolo é renderizado em SVG vetorial, escalonável.
-//
-// Convenção de tamanho:
-//   - viewBox: -12 -12 24 24  (24×24 unidades, origem no centro)
-//   - Escala padrão no canvas: 1 símbolo = ~0.4m real
-//   - Stroke: 1.5 unidades (linha técnica)
-//   - Fill: sempre explicito (nunca depende do contexto)
 // ════════════════════════════════════════════════════════════════
 
 import type { TipoPontoEletrico } from '../types/geometry'
 
-// ── Interface de símbolo ──────────────────────────────────────────
+// ── Interfaces preservadas (compatibilidade com grupoInstalacao.ts) ──
+
 export interface RegraInstalacao {
-  // Altura padrão de instalação (metros a partir do piso)
-  readonly altura_m:        number
-  // Tipo de caixa de embutir compatível
-  readonly caixa:           '4x2' | '4x4' | 'octogonal' | 'passagem' | 'nenhuma'
-  // Este símbolo pode ser agrupado com outros na mesma caixa?
-  readonly permite_agrupamento: boolean
-  // Tipos de circuito compatíveis
-  readonly circuitos_compativeis: string[]  // 'ILUM' | 'TUG' | 'TUE' | 'GERAL'
-  // Deve ficar em parede (não no teto ou piso)?
-  readonly requer_parede:   boolean
-  // Distância mínima de outros pontos (m)
-  readonly dist_min_m:      number
-  // Anotação NBR
-  readonly referencia_nbr?: string
+  readonly altura_m:             number
+  readonly caixa:                '4x2' | '4x4' | 'octogonal' | 'passagem' | 'nenhuma'
+  readonly permite_agrupamento:  boolean
+  readonly circuitos_compativeis: string[]
+  readonly requer_parede:        boolean
+  readonly dist_min_m:           number
+  readonly referencia_nbr?:      string
 }
 
 export interface SimboloNBR5444 {
   readonly id:          TipoPontoEletrico
-  readonly nome:        string          // nome oficial NBR 5444
-  readonly descricao:   string          // descrição para tooltip
-  // SVG paths/elements (sem <svg> wrapper)
-  readonly path:        string
-  // Ponto de conexão elétrica (relativo ao centro, unidades SVG)
+  readonly nome:        string
+  readonly descricao:   string
+  readonly path:        string    // SVG gerado das DrawOps
   readonly conn_x:      number
   readonly conn_y:      number
-  // Regras construtivas paramétricas
   readonly regras:      RegraInstalacao
 }
 
-// ── Cor padrão dos símbolos (tema claro/escuro) ───────────────────
-const S  = 'currentColor'  // stroke — herda da cor do CSS
-const W  = '1.5'           // strokeWidth padrão
-const W2 = '2'             // strokeWidth linha de ênfase
-const NONE = 'none'
+// ── DrawOps — geometria DXF normalizada ──────────────────────────
 
-// ── Biblioteca de símbolos NBR 5444 ──────────────────────────────
+type DrawOp =
+  | { t: 'line';   x1: number; y1: number; x2: number; y2: number }
+  | { t: 'circle'; cx: number; cy: number; r: number; fill?: boolean }
+  | { t: 'arc';    cx: number; cy: number; r: number; a1: number; a2: number }
+  | { t: 'poly';   pts: [number,number][]; closed: boolean; fill?: boolean }
+  | { t: 'rect';   x: number; y: number; w: number; h: number; fill?: boolean }
+
+const L = (x1:number,y1:number,x2:number,y2:number): DrawOp => ({t:'line',x1,y1,x2,y2})
+const C = (cx:number,cy:number,r:number,fill=false): DrawOp => ({t:'circle',cx,cy,r,fill})
+const A = (cx:number,cy:number,r:number,a1:number,a2:number): DrawOp => ({t:'arc',cx,cy,r,a1,a2})
+const P = (pts:[number,number][],closed:boolean,fill=false): DrawOp => ({t:'poly',pts,closed,fill})
+const R = (x:number,y:number,w:number,h:number,fill=false): DrawOp => ({t:'rect',x,y,w,h,fill})
+
+// Sub-geometrias reutilizáveis
+const BOX2: DrawOp[] = [R(-0.05,-0.05,0.10,0.05)]
+const HASTE_INT: DrawOp[] = [L(0,0.05,0,0)]
+const TRI  = (): DrawOp[] => [L(0,0.178,-0.064,0.05), L(0.064,0.05,0,0.178), L(-0.064,0.05,0.064,0.05)]
+const TRIM = (): DrawOp[] => [P([[-0.064,0.05],[0,0.05],[0,0.178]],true,true)]
+const TRIC = (): DrawOp[] => [P([[0,0.178],[-0.064,0.05],[0.064,0.05]],true,true)]
+const TRI20: DrawOp[] = [
+  P([[0.0392,0.0995],[-0.0392,0.0995],[-0.064,0.05],[0.064,0.05]],true,true),
+  L(-0.0392,0.0995,0.0392,0.0995),
+]
+
+// ── Conversor DrawOps → SVG path string ──────────────────────────
+// Tamanho alvo: viewBox -12 -12 24 24 (24×24 unidades, origen no centro)
+// Os símbolos DXF têm bounding box variável; normalizamos para caber em ~±10u
+
+function opsToSvg(ops: DrawOp[], size = 20): string {
+  if (!ops.length) return ''
+  // Calcular bounding box
+  let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity
+  const e = (x:number,y:number) => {
+    if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y
+  }
+  for(const op of ops){
+    if(op.t==='line'){e(op.x1,op.y1);e(op.x2,op.y2)}
+    else if(op.t==='circle'||op.t==='arc'){e(op.cx-op.r,op.cy-op.r);e(op.cx+op.r,op.cy+op.r)}
+    else if(op.t==='poly'){for(const[x,y]of op.pts)e(x,y)}
+    else if(op.t==='rect'){e(op.x,op.y);e(op.x+op.w,op.y+op.h)}
+  }
+  const bw=maxx-minx||0.01, bh=maxy-miny||0.01
+  const sc = size / Math.max(bw,bh)
+  const ox = -(minx + (maxx-minx)/2) * sc   // centrar em 0
+  const oy =  (miny + (maxy-miny)/2) * sc   // centrar em 0 (flip Y)
+
+  const tx  = (x:number) => +(( x*sc + ox).toFixed(2))
+  const ty  = (y:number) => +( (-y*sc + oy).toFixed(2))   // flip Y
+  const rs  = (r:number) => +( (r*sc).toFixed(2))
+  const sw  = 'strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"'
+  const swb = 'strokeWidth="2"   strokeLinecap="round" strokeLinejoin="round"'
+  const F   = 'fill="none" stroke="currentColor"'
+  const FB  = 'fill="currentColor" stroke="none"'
+
+  const parts: string[] = []
+  for(const op of ops){
+    if(op.t==='line'){
+      if(Math.abs(op.x2-op.x1)<1e-9&&Math.abs(op.y2-op.y1)<1e-9)continue
+      parts.push(`<line x1="${tx(op.x1)}" y1="${ty(op.y1)}" x2="${tx(op.x2)}" y2="${ty(op.y2)}" ${F} ${sw}/>`)
+    } else if(op.t==='circle'){
+      const r=rs(op.r); if(r<0.2)continue
+      if(op.fill) parts.push(`<circle cx="${tx(op.cx)}" cy="${ty(op.cy)}" r="${r}" ${FB}/>`)
+      else        parts.push(`<circle cx="${tx(op.cx)}" cy="${ty(op.cy)}" r="${r}" ${F} ${sw}/>`)
+    } else if(op.t==='arc'){
+      let diff=((op.a2-op.a1)+360)%360; if(diff<1e-4)diff=360
+      const r=rs(op.r); if(r<0.2)continue
+      if(diff>359.9){parts.push(`<circle cx="${tx(op.cx)}" cy="${ty(op.cy)}" r="${r}" ${F} ${sw}/>`);continue}
+      const a1r=op.a1*Math.PI/180, a2r=op.a2*Math.PI/180
+      // flip Y: sin inverte, cos não
+      const x1s=tx(op.cx+op.r*Math.cos(a1r)), y1s=ty(op.cy+op.r*Math.sin(a1r))
+      const x2s=tx(op.cx+op.r*Math.cos(a2r)), y2s=ty(op.cy+op.r*Math.sin(a2r))
+      parts.push(`<path d="M ${x1s},${y1s} A ${r},${r} 0 ${diff>180?1:0},1 ${x2s},${y2s}" ${F} ${sw}/>`)
+    } else if(op.t==='poly'){
+      if(op.pts.length<2)continue
+      const pts=op.pts.map(([x,y])=>`${tx(x)},${ty(y)}`).join(' ')
+      if(op.fill) parts.push(`<polygon points="${pts}" ${FB}/>`)
+      else {
+        const tag=op.closed?'polygon':'polyline'
+        parts.push(`<${tag} points="${pts}" ${F} ${sw}/>`)
+      }
+    } else if(op.t==='rect'){
+      const rx=tx(op.x), ry=ty(op.y+op.h)
+      const rw=+(( op.w*sc).toFixed(2)), rh=+((op.h*sc).toFixed(2))
+      if(op.fill) parts.push(`<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" ${FB}/>`)
+      else        parts.push(`<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" ${F} ${swb}/>`)
+    }
+  }
+  return parts.join('\n')
+}
+
+// Regra padrão para a maioria dos símbolos
+const R_PAREDE = (altura_m: number, circ: string[], ref?: string): RegraInstalacao => ({
+  altura_m, caixa: '4x2', permite_agrupamento: true,
+  circuitos_compativeis: circ, requer_parede: true, dist_min_m: 0.15,
+  referencia_nbr: ref,
+})
+
+// ── Catálogo principal — SIMBOLOS_NBR5444 ────────────────────────
+// paths gerados a partir das DrawOps DXF reais
 export const SIMBOLOS_NBR5444: Record<TipoPontoEletrico, SimboloNBR5444> = {
 
-  // ── Ponto de luz (luminária no teto) ───────────────────────────
-  // NBR 5444: círculo com cruz interna
+  // ── Iluminação ──────────────────────────────────────────────────
   LUMINARIA: {
-    id: 'LUMINARIA', nome: 'Ponto de luz',
-    descricao: 'Luminária de teto (ponto de luz)',
-    path: `
-      <circle cx="0" cy="0" r="9" stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <line x1="-6" y1="0" x2="6" y2="0" stroke="${S}" strokeWidth="${W}" />
-      <line x1="0" y1="-6" x2="0" y2="6" stroke="${S}" strokeWidth="${W}" />
-    `,
-    conn_x: 0, conn_y: -9,
-    regras: {
-      altura_m: 2.80, caixa: 'octogonal', permite_agrupamento: false,
+    id: 'LUMINARIA', nome: 'Ponto de luz (teto)',
+    descricao: 'Luminária de teto — caixa octogonal 4×4 (NBR 5444)',
+    path: opsToSvg([
+      P([[-0.0845,0.035],[-0.0845,-0.035],[-0.035,-0.0845],[0.035,-0.0845],
+         [0.0845,-0.035],[0.0845,0.035],[0.035,0.0845],[-0.035,0.0845]],true),
+      L(0,0.0217,0,-0.0217), L(-0.0217,0,0.0217,0),
+    ]),
+    conn_x: 0, conn_y: -10,
+    regras: { altura_m: 2.80, caixa: 'octogonal', permite_agrupamento: false,
       circuitos_compativeis: ['ILUM'], requer_parede: false, dist_min_m: 0.15,
-      referencia_nbr: 'NBR 5444 — Ponto de luz no teto',
-    },
+      referencia_nbr: 'NBR 5444 — Ponto de luz no teto' },
   },
 
-  // ── Luminária de parede (arandela) ────────────────────────────
   LUMINARIA_PAREDE: {
-    id: 'LUMINARIA_PAREDE', nome: 'Ponto de luz — parede',
-    descricao: 'Arandela ou luminária de parede',
-    path: `
-      <circle cx="0" cy="0" r="9" stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <line x1="-6" y1="0" x2="6" y2="0" stroke="${S}" strokeWidth="${W}" />
-      <line x1="0" y1="-6" x2="0" y2="6" stroke="${S}" strokeWidth="${W}" />
-      <line x1="0" y1="9" x2="0" y2="12" stroke="${S}" strokeWidth="${W2}" />
-    `,
-    conn_x: 0, conn_y: 12,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    id: 'LUMINARIA_PAREDE', nome: 'Arandela (parede)',
+    descricao: 'Ponto de iluminação na parede / arandela',
+    path: opsToSvg([
+      P([[0,-0.075],[0.0626,0.0334],[-0.0626,0.0334]],true),
+      L(0,0.0505,0,0.1005),
+      L(-0.0375,0.0538,-0.0625,0.0971),
+      L(0.0375,0.0538,0.0625,0.0971),
+      R(-0.075,-0.1,0.15,0.1),
+    ]),
+    conn_x: 0, conn_y: 10,
+    regras: { altura_m: 1.80, caixa: '4x2', permite_agrupamento: false,
+      circuitos_compativeis: ['ILUM'], requer_parede: true, dist_min_m: 0.15,
+      referencia_nbr: 'NBR 5444 — Ponto de luz na parede' },
   },
 
-  // ── Interruptor simples ────────────────────────────────────────
-  // NBR 5444: círculo sólido + linha diagonal com tick
+  // ── Interruptores ───────────────────────────────────────────────
   INTERRUPTOR_SIMPLES: {
     id: 'INTERRUPTOR_SIMPLES', nome: 'Interruptor simples',
-    descricao: 'Interruptor simples (1 via)',
-    path: `
-      <circle cx="0" cy="0" r="4" fill="${S}" />
-      <line x1="0" y1="0" x2="10" y2="-10" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="8" y1="-12" x2="12" y2="-8" stroke="${S}" strokeWidth="${W}" />
-    `,
-    conn_x: 0, conn_y: 4,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    descricao: 'Interruptor simples 1 seção h=110cm',
+    path: opsToSvg([C(0,0.125,0.075), ...HASTE_INT, ...BOX2]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(1.10, ['ILUM'], 'NBR 5444 — Interruptor simples'),
   },
 
-  // ── Interruptor paralelo (three-way) ──────────────────────────
   INTERRUPTOR_PARALELO: {
     id: 'INTERRUPTOR_PARALELO', nome: 'Interruptor paralelo',
-    descricao: 'Interruptor paralelo — 2 teclas (two-way)',
-    path: `
-      <circle cx="0" cy="0" r="4" fill="${S}" />
-      <line x1="0" y1="0" x2="10" y2="-10" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="8" y1="-12" x2="12" y2="-8" stroke="${S}" strokeWidth="${W}" />
-      <line x1="6" y1="-14" x2="10" y2="-10" stroke="${S}" strokeWidth="${W}" />
-    `,
-    conn_x: 0, conn_y: 4,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    descricao: 'Interruptor paralelo (3 vias) — two-way',
+    path: opsToSvg([
+      C(0,0.125,0.075),
+      L(0,0.2,0,0.05),
+      A(0.05,0.05,0.04,0,180),
+      ...HASTE_INT, ...BOX2,
+    ]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(1.10, ['ILUM'], 'NBR 5444 — Interruptor paralelo'),
   },
 
-  // ── Interruptor intermediário ─────────────────────────────────
   INTERRUPTOR_INTERMEDIARIO: {
     id: 'INTERRUPTOR_INTERMEDIARIO', nome: 'Interruptor intermediário',
-    descricao: 'Interruptor intermediário — 4 vias',
-    path: `
-      <circle cx="0" cy="0" r="4" fill="${S}" />
-      <line x1="0" y1="0" x2="10" y2="-10" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="8" y1="-12" x2="12" y2="-8" stroke="${S}" strokeWidth="${W}" />
-      <line x1="6" y1="-14" x2="10" y2="-10" stroke="${S}" strokeWidth="${W}" />
-      <line x1="4" y1="-16" x2="8" y2="-12" stroke="${S}" strokeWidth="${W}" />
-    `,
-    conn_x: 0, conn_y: 4,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    descricao: 'Interruptor de cruzamento (4 vias)',
+    path: opsToSvg([
+      C(0,0.125,0.075),
+      L(0,0.2,0,0.125),
+      L(0.065,0.0875,0,0.125),
+      L(-0.065,0.0875,0,0.125),
+      ...HASTE_INT, ...BOX2,
+    ]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(1.10, ['ILUM'], 'NBR 5444 — Interruptor intermediário'),
   },
 
-  // ── Tomada uso geral — baixa (0.30m) ──────────────────────────
-  // NBR 5444: semicírculo + barras verticais
+  // ── Tomadas TUG ─────────────────────────────────────────────────
   TUG_BAIXA: {
-    id: 'TUG_BAIXA', nome: 'TUG — baixa (0.30m)',
-    descricao: 'Tomada 2P+T — instalação baixa (0.30m) — NBR 5410',
-    path: `
-      <path d="M -8 0 A 8 8 0 0 1 8 0" stroke="${S}" strokeWidth="${W2}" fill="${NONE}" />
-      <line x1="0" y1="0" x2="0" y2="10" stroke="${S}" strokeWidth="${W}" />
-      <line x1="-4" y1="-5" x2="-4" y2="-1" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="4" y1="-5" x2="4" y2="-1" stroke="${S}" strokeWidth="${W2}" />
-    `,
-    conn_x: 0, conn_y: 10,
-    regras: {
-      altura_m: 0.30, caixa: '4x2', permite_agrupamento: true,
-      circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15,
-      referencia_nbr: 'NBR 5410 §9.5.2.2 | NBR 5444 — Tomada baixa',
-    },
+    id: 'TUG_BAIXA', nome: 'TUG h=30cm',
+    descricao: 'Tomada 2P+T 10A h=30cm — triângulo vazio',
+    path: opsToSvg([...TRI(), L(0,0.05,0,0), ...BOX2]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(0.30, ['TUG'], 'NBR 5410 §9.5.2.2 | NBR 5444 — Tomada baixa'),
   },
 
-  // ── Tomada uso geral — média (1.10m) ──────────────────────────
   TUG_MEDIA: {
-    id: 'TUG_MEDIA', nome: 'TUG — média (1.10m)',
-    descricao: 'Tomada 2P+T — instalação média (1.10m)',
-    path: `
-      <path d="M -8 0 A 8 8 0 0 1 8 0" stroke="${S}" strokeWidth="${W2}" fill="${NONE}" />
-      <line x1="0" y1="0" x2="0" y2="10" stroke="${S}" strokeWidth="${W}" />
-      <line x1="-4" y1="-5" x2="-4" y2="-1" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="4" y1="-5" x2="4" y2="-1" stroke="${S}" strokeWidth="${W2}" />
-      <text x="9" y="4" fontSize="6" fill="${S}" fontFamily="monospace">M</text>
-    `,
-    conn_x: 0, conn_y: 10,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    id: 'TUG_MEDIA', nome: 'TUG h=80cm',
+    descricao: 'Tomada 2P+T 10A h=80cm — fill meia esquerda',
+    path: opsToSvg([...TRIM(), ...TRI(), L(0,0.05,0,0), ...BOX2]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(0.80, ['TUG'], 'NBR 5410 §9.5.2.2 | NBR 5444 — Tomada média'),
   },
 
-  // ── Tomada uso geral — alta (2.0m) ────────────────────────────
   TUG_ALTA: {
-    id: 'TUG_ALTA', nome: 'TUG — alta (2.0m)',
-    descricao: 'Tomada 2P+T — instalação alta (2.0m) — cozinha, bancada',
-    path: `
-      <path d="M -8 0 A 8 8 0 0 1 8 0" stroke="${S}" strokeWidth="${W2}" fill="${NONE}" />
-      <line x1="0" y1="0" x2="0" y2="10" stroke="${S}" strokeWidth="${W}" />
-      <line x1="-4" y1="-5" x2="-4" y2="-1" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="4" y1="-5" x2="4" y2="-1" stroke="${S}" strokeWidth="${W2}" />
-      <text x="9" y="4" fontSize="6" fill="${S}" fontFamily="monospace">A</text>
-    `,
-    conn_x: 0, conn_y: 10,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    id: 'TUG_ALTA', nome: 'TUG h=230cm',
+    descricao: 'Tomada 2P+T 10A h=230cm — triângulo cheio',
+    path: opsToSvg([...TRIC(), ...TRI(), L(0,0.05,0,0), ...BOX2]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(2.00, ['TUG'], 'NBR 5444 — Tomada alta'),
   },
 
-  // ── Tomada uso específico (TUE) ────────────────────────────────
+  // ── TUE ─────────────────────────────────────────────────────────
   TUE: {
-    id: 'TUE', nome: 'TUE — Tomada uso específico',
-    descricao: 'Tomada de uso específico (equipamento dedicado)',
-    path: `
-      <rect x="-9" y="-9" width="18" height="18" rx="2"
-        stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <line x1="-5" y1="-4" x2="-5" y2="2" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="5" y1="-4" x2="5" y2="2" stroke="${S}" strokeWidth="${W2}" />
-      <circle cx="0" cy="4" r="2" stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-    `,
-    conn_x: 0, conn_y: 9,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    id: 'TUE', nome: 'TUE — Uso específico',
+    descricao: 'Tomada de uso específico — ponto de força',
+    path: opsToSvg([
+      R(-0.05,-0.05,0.1,0.05),
+      R(-0.042,0.0459,0.084,0.084),
+      L(0,0.1,0,0.148), L(0,0.0757,0,0),
+    ]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(1.10, ['TUE'], 'NBR 5410 §9.5.4 | NBR 5444 — TUE'),
   },
 
   TUE_MONOFASICO: {
-    id: 'TUE_MONOFASICO', nome: 'TUE monofásico',
-    descricao: 'TUE monofásico 2P+T (127V/220V)',
-    path: `
-      <rect x="-9" y="-9" width="18" height="18" rx="2"
-        stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <line x1="-5" y1="-4" x2="-5" y2="2" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="5" y1="-4" x2="5" y2="2" stroke="${S}" strokeWidth="${W2}" />
-      <circle cx="0" cy="4" r="2" stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <text x="-4" y="-2" fontSize="5" fill="${S}" fontFamily="monospace">1F</text>
-    `,
-    conn_x: 0, conn_y: 9,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    id: 'TUE_MONOFASICO', nome: 'TUE monofásico 20A',
+    descricao: 'TUE monofásico 2P+T 20A — trapézio',
+    path: opsToSvg([...TRI20, ...TRI(), L(0,0.05,0,0), ...BOX2]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(1.10, ['TUE'], 'NBR 5410 §9.5.4 | NBR 5444 — TUE 20A mono'),
   },
 
   TUE_BIFASICO: {
     id: 'TUE_BIFASICO', nome: 'TUE bifásico',
-    descricao: 'TUE bifásico 3P+T (220V)',
-    path: `
-      <rect x="-9" y="-9" width="18" height="18" rx="2"
-        stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <line x1="-5" y1="-4" x2="-5" y2="2" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="0" y1="-5" x2="0" y2="1" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="5" y1="-4" x2="5" y2="2" stroke="${S}" strokeWidth="${W2}" />
-      <circle cx="0" cy="5" r="2" stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <text x="-4" y="-2" fontSize="5" fill="${S}" fontFamily="monospace">2F</text>
-    `,
-    conn_x: 0, conn_y: 9,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    descricao: 'TUE bifásico 3P+T 220V — trapézio + barra',
+    path: opsToSvg([
+      ...TRI20, ...TRI(),
+      L(-0.08,0.12,0.08,0.12),
+      L(0,0.05,0,0), ...BOX2,
+    ]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(1.10, ['TUE'], 'NBR 5410 §9.5.4 | NBR 5444 — TUE bifásico'),
   },
 
   TUE_TRIFASICO: {
     id: 'TUE_TRIFASICO', nome: 'TUE trifásico',
-    descricao: 'TUE trifásico 4P+T (380V)',
-    path: `
-      <rect x="-9" y="-9" width="18" height="18" rx="2"
-        stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <line x1="-6" y1="-4" x2="-6" y2="2" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="0" y1="-5" x2="0" y2="1" stroke="${S}" strokeWidth="${W2}" />
-      <line x1="6" y1="-4" x2="6" y2="2" stroke="${S}" strokeWidth="${W2}" />
-      <circle cx="0" cy="5" r="2" stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <text x="-4" y="-2" fontSize="5" fill="${S}" fontFamily="monospace">3F</text>
-    `,
-    conn_x: 0, conn_y: 9,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    descricao: 'TUE trifásico 4P+T 380V — trapézio + 2 barras',
+    path: opsToSvg([
+      ...TRI20, ...TRI(),
+      L(-0.08,0.12,0.08,0.12),
+      L(-0.08,0.15,0.08,0.15),
+      L(0,0.05,0,0), ...BOX2,
+    ]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(1.10, ['TUE'], 'NBR 5410 §9.5.4 | NBR 5444 — TUE trifásico'),
   },
 
-  // ── Quadro de distribuição ─────────────────────────────────────
+  // ── Infraestrutura ──────────────────────────────────────────────
   QD: {
     id: 'QD', nome: 'Quadro de distribuição',
-    descricao: 'Quadro de distribuição (QD) — ponto de origem dos circuitos',
-    path: `
-      <rect x="-10" y="-12" width="20" height="24" rx="1"
-        stroke="${S}" strokeWidth="${W2}" fill="${NONE}" />
-      <rect x="-7" y="-9" width="14" height="18" rx="1"
-        stroke="${S}" strokeWidth="0.8" fill="${NONE}" />
-      <line x1="-5" y1="-6" x2="5" y2="-6" stroke="${S}" strokeWidth="${W}" />
-      <line x1="-5" y1="-2" x2="5" y2="-2" stroke="${S}" strokeWidth="${W}" />
-      <line x1="-5" y1="2" x2="5" y2="2" stroke="${S}" strokeWidth="${W}" />
-      <line x1="-5" y1="6" x2="5" y2="6" stroke="${S}" strokeWidth="${W}" />
-    `,
-    conn_x: 0, conn_y: -12,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    descricao: 'Centro de distribuição — quadro de circuitos',
+    path: opsToSvg([
+      R(-0.23,-0.15,0.46,0.15),
+      L(-0.2288,-0.1201,0.2305,0.0276),
+      P([[-0.23,-0.1474],[-0.0024,-0.0742],[-0.23,0]],true,true),
+      P([[0.23,-0.15],[0.23,0],[0.2284,0],[-0.0024,-0.0742]],true,true),
+    ]),
+    conn_x: 0, conn_y: 0,
+    regras: { altura_m: 1.50, caixa: 'passagem', permite_agrupamento: false,
+      circuitos_compativeis: ['ILUM','TUG','TUE','GERAL'], requer_parede: true,
+      dist_min_m: 0.30, referencia_nbr: 'NBR 5444 — Quadro de distribuição' },
   },
 
-  // ── Caixa de passagem ─────────────────────────────────────────
   CAIXA_PASSAGEM: {
     id: 'CAIXA_PASSAGEM', nome: 'Caixa de passagem',
-    descricao: 'Caixa de passagem — junção de eletrodutos',
-    path: `
-      <rect x="-8" y="-8" width="16" height="16" rx="1"
-        stroke="${S}" strokeWidth="${W}" fill="${NONE}" strokeDasharray="3 2" />
-      <line x1="-5" y1="-5" x2="5" y2="5" stroke="${S}" strokeWidth="0.8" />
-      <line x1="5" y1="-5" x2="-5" y2="5" stroke="${S}" strokeWidth="0.8" />
-    `,
+    descricao: 'Caixa de passagem 4×2',
+    path: opsToSvg([
+      R(-0.05,-0.05,0.1,0.05),
+      L(-0.025,-0.025,0.025,-0.025),
+    ]),
     conn_x: 0, conn_y: 0,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    regras: R_PAREDE(0.30, ['ILUM','TUG','TUE','GERAL']),
   },
 
-  // ── Caixa de derivação ────────────────────────────────────────
   CAIXA_DERIVACAO: {
     id: 'CAIXA_DERIVACAO', nome: 'Caixa de derivação',
-    descricao: 'Caixa de derivação — ponto de ramificação de circuitos',
-    path: `
-      <circle cx="0" cy="0" r="9"
-        stroke="${S}" strokeWidth="${W}" fill="${NONE}" strokeDasharray="4 2" />
-      <circle cx="0" cy="0" r="3" fill="${S}" />
-    `,
+    descricao: 'Caixa octogonal de derivação',
+    path: opsToSvg([
+      P([[-0.0191,0.0462],[-0.0462,0.0191],[-0.0462,-0.0191],[-0.0191,-0.0462],
+         [0.0191,-0.0462],[0.0462,-0.0191],[0.0462,0.0191],[0.0191,0.0462]],true),
+    ]),
     conn_x: 0, conn_y: 0,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    regras: R_PAREDE(0.30, ['ILUM','TUG','TUE','GERAL']),
   },
 
-  // ── Campainha ─────────────────────────────────────────────────
+  // ── Outros ──────────────────────────────────────────────────────
   CAMPAINHA: {
-    id: 'CAMPAINHA', nome: 'Campainha',
-    descricao: 'Campainha elétrica / interfone',
-    path: `
-      <path d="M -8 4 Q 0 -10 8 4" stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <line x1="-8" y1="4" x2="8" y2="4" stroke="${S}" strokeWidth="${W2}" />
-      <circle cx="0" cy="7" r="2" fill="${S}" />
-    `,
-    conn_x: 0, conn_y: 4,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    id: 'CAMPAINHA', nome: 'Pulsador / Campainha',
+    descricao: 'Pulsador para campainha h=120cm',
+    path: opsToSvg([
+      R(-0.05,-0.05,0.1,0.05),
+      R(-0.047,-0.047,0.094,0.044),
+      L(0,0,0,0.025),
+      C(0,0.092,0.07),
+      C(0,0.092,0.067),
+    ]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(1.20, ['GERAL']),
   },
 
-  // ── Sensor de presença ────────────────────────────────────────
   SENSOR_PRESENCA: {
     id: 'SENSOR_PRESENCA', nome: 'Sensor de presença',
-    descricao: 'Sensor de presença / movimento',
-    path: `
-      <path d="M -7 7 Q -10 0 0 -10 Q 10 0 7 7 Z"
-        stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <circle cx="0" cy="0" r="3" fill="${S}" />
-      <line x1="-9" y1="7" x2="9" y2="7" stroke="${S}" strokeWidth="${W}" />
-    `,
-    conn_x: 0, conn_y: 7,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    descricao: 'Sensor / interruptor de presença no teto',
+    path: opsToSvg([
+      P([[-0.1,-0.1],[-0.1,0.1],[0.1,0.1],[0.1,-0.1],[-0.1,-0.1]],false),
+      C(0,0,0.05),
+      P([[-0.1,-0.1],[-0.0692,-0.0692]],false),
+      P([[0.1,-0.1],[0.0692,-0.0692]],false),
+      P([[-0.1,0.1],[-0.0692,0.0692]],false),
+      P([[0.1,0.1],[0.0692,0.0692]],false),
+    ]),
+    conn_x: 0, conn_y: -10,
+    regras: { altura_m: 2.80, caixa: '4x4', permite_agrupamento: false,
+      circuitos_compativeis: ['ILUM'], requer_parede: false, dist_min_m: 0.15 },
   },
 
-  // ── Ponto de dados/telefone ───────────────────────────────────
   DADOS_TELEFONE: {
-    id: 'DADOS_TELEFONE', nome: 'Dados / Telefone',
-    descricao: 'Ponto de dados (RJ-45) ou telefone (RJ-11)',
-    path: `
-      <rect x="-9" y="-6" width="18" height="12" rx="2"
-        stroke="${S}" strokeWidth="${W}" fill="${NONE}" />
-      <text x="0" y="4" textAnchor="middle" fontSize="8" fill="${S}" fontFamily="monospace" fontWeight="700">D</text>
-    `,
-    conn_x: 0, conn_y: 6,
-    regras: { altura_m: 1.10, caixa: '4x2', permite_agrupamento: true, circuitos_compativeis: ['TUG'], requer_parede: true, dist_min_m: 0.15 },
+    id: 'DADOS_TELEFONE', nome: 'Dados / RJ45',
+    descricao: 'Tomada de dados RJ45 / telefone',
+    path: opsToSvg([
+      C(0,0,0.05),
+      P([[0.05,0],[0.3,0]],false),
+      C(0.3,0,0.03,true),
+    ]),
+    conn_x: 0, conn_y: 5,
+    regras: R_PAREDE(0.30, ['GERAL']),
   },
 }
 
-// ── Cores por tipo de circuito (para colorir no canvas) ───────────
+// ── Preservados (usados em outros módulos) ────────────────────────
+
 export const COR_CIRCUITO: Record<string, string> = {
-  ILUM:  '#0d7a47',   // verde — iluminação
-  TUG:   '#1464c8',   // azul — tomadas gerais
-  TUE:   '#c87014',   // âmbar — uso específico
-  GERAL: '#5b21b6',   // roxo — circuito geral
+  ILUM:  '#0d7a47',
+  TUG:   '#1464c8',
+  TUE:   '#c87014',
+  GERAL: '#5b21b6',
 }
 
-// ── Grupos de símbolos para a paleta da UI ────────────────────────
 export const PALETA_SIMBOLOS: { grupo: string; simbolos: TipoPontoEletrico[] }[] = [
-  {
-    grupo: 'Iluminação',
-    simbolos: ['LUMINARIA', 'LUMINARIA_PAREDE'],
-  },
-  {
-    grupo: 'Interruptores',
-    simbolos: ['INTERRUPTOR_SIMPLES', 'INTERRUPTOR_PARALELO', 'INTERRUPTOR_INTERMEDIARIO'],
-  },
-  {
-    grupo: 'Tomadas (TUG)',
-    simbolos: ['TUG_BAIXA', 'TUG_MEDIA', 'TUG_ALTA'],
-  },
-  {
-    grupo: 'Uso Específico (TUE)',
-    simbolos: ['TUE_MONOFASICO', 'TUE_BIFASICO', 'TUE_TRIFASICO'],
-  },
-  {
-    grupo: 'Infraestrutura',
-    simbolos: ['QD', 'CAIXA_PASSAGEM', 'CAIXA_DERIVACAO'],
-  },
-  {
-    grupo: 'Outros',
-    simbolos: ['CAMPAINHA', 'SENSOR_PRESENCA', 'DADOS_TELEFONE'],
-  },
+  { grupo: 'Iluminação',        simbolos: ['LUMINARIA', 'LUMINARIA_PAREDE'] },
+  { grupo: 'Interruptores',     simbolos: ['INTERRUPTOR_SIMPLES', 'INTERRUPTOR_PARALELO', 'INTERRUPTOR_INTERMEDIARIO'] },
+  { grupo: 'Tomadas (TUG)',     simbolos: ['TUG_BAIXA', 'TUG_MEDIA', 'TUG_ALTA'] },
+  { grupo: 'Uso Específico',    simbolos: ['TUE', 'TUE_MONOFASICO', 'TUE_BIFASICO', 'TUE_TRIFASICO'] },
+  { grupo: 'Infraestrutura',    simbolos: ['QD', 'CAIXA_PASSAGEM', 'CAIXA_DERIVACAO'] },
+  { grupo: 'Outros',            simbolos: ['CAMPAINHA', 'SENSOR_PRESENCA', 'DADOS_TELEFONE'] },
 ]

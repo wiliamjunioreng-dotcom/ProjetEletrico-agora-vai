@@ -64,6 +64,10 @@ function validar(p: any): Val[] {
     v.push({ campo: 't_amb',       msg: 'Temperatura fora do intervalo 10–60°C',tipo: 'erro' })
   if (p.du_max_pct > 7)
     v.push({ campo: 'du_max_pct',  msg: 'NBR 5410 limita a 7% no total',       tipo: 'erro' })
+  if (p.du_max_pct <= 0)
+    v.push({ campo: 'du_max_pct',  msg: 'ΔU máximo deve ser maior que zero',   tipo: 'erro' })
+  if (p.du_ramal_pct < 0 || p.du_ramal_pct >= p.du_max_pct)
+    v.push({ campo: 'du_ramal_pct', msg: 'Reserva do ramal deve ser ≥ 0 e menor que o ΔU máximo total', tipo: 'erro' })
   if (p.fp_global < 0.7 || p.fp_global > 1)
     v.push({ campo: 'fp_global',   msg: 'FP deve estar entre 0,70 e 1,00',     tipo: 'erro' })
   if (p.icc_rede_ka <= 0)
@@ -196,6 +200,12 @@ export function Projeto() {
                 <input className="finput" value={projeto.ano} onChange={upd('ano')}
                   placeholder={String(new Date().getFullYear())} />
               </div>
+            </div>
+
+            <div className="fgroup">
+              <label className="flabel">Empresa / Escritório</label>
+              <input className="finput" value={projeto.empresa} onChange={upd('empresa')}
+                placeholder="Ex: Lumen Soluções" />
             </div>
 
             <div className="form-grid c2">
@@ -362,8 +372,10 @@ export function Projeto() {
               <div className="fgroup">
                 <label className="flabel">dU reserva ramal de entrada (%)</label>
                 <input className="finput" type="number" value={projeto.du_ramal_pct}
-                  onChange={upd('du_ramal_pct')} min={0} max={3} step={0.5} />
+                  onChange={upd('du_ramal_pct')} min={0} max={3} step={0.5}
+                  style={borda('du_ramal_pct')} />
                 <div className="fhint">Típico: 0,5% — subtrai do limite dos circuitos</div>
+                <ErroInline campo="du_ramal_pct" />
               </div>
               <div className="fgroup">
                 <label className="flabel">Icc disponível na rede (kA)</label>

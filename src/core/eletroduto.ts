@@ -63,10 +63,20 @@ export interface RevisaoSeção {
   readonly motivo:      string
 }
 
-// ── Fator de ocupação por número de condutores ────────────────────
-// NBR 5410 §6.2.11.2: máx 40% para 2+ circuitos, 53% para 1 circuito
-export function limiteOcupacaoPct(n_circuitos: number): number {
-  return n_circuitos === 1 ? 53 : 40
+// ── Fator de ocupação por número de CONDUTORES ────────────────────
+// NBR 5410 §6.2.11.1.6 — a regra é por CONDUTOR, não por circuito:
+//   1 condutor  → 53%
+//   2 condutores → 31%
+//   3 ou mais    → 40%
+// BUG CORRIGIDO: a versão anterior usava nº de CIRCUITOS e retornava
+// 53% para "1 circuito" — mas um circuito monofásico completo já tem
+// 3 condutores (F+N+PE), cujo limite correto é 40%. O valor 53%
+// (permissivo demais) só vale para 1 condutor isolado, situação que
+// praticamente não ocorre em instalação predial com circuitos completos.
+export function limiteOcupacaoPct(n_condutores: number): number {
+  if (n_condutores <= 1) return 53
+  if (n_condutores === 2) return 31
+  return 40
 }
 
 // ── Calcular área total de condutores no grupo ────────────────────
@@ -89,9 +99,9 @@ export function areaCondutoresGrupo(
 // ── Selecionar menor diâmetro que comporta os condutores ─────────
 export function diametroMinimo(
   area_condutores_mm2: number,
-  n_circuitos: number
+  n_condutores: number
 ): 20 | 25 | 32 | 40 | 50 {
-  const ocupacao_max_pct = limiteOcupacaoPct(n_circuitos)
+  const ocupacao_max_pct = limiteOcupacaoPct(n_condutores)
   const diametros: (20 | 25 | 32 | 40 | 50)[] = [20, 25, 32, 40, 50]
 
   for (const d of diametros) {
@@ -116,11 +126,15 @@ export function buildGrupoEletroduto(
   // Área física dos condutores
   const area_condutores = areaCondutoresGrupo(circuitos)
 
+  // Total de CONDUTORES no eletroduto (a regra de ocupação da norma
+  // é por condutor, não por circuito — §6.2.11.1.6)
+  const n_condutores_total = circuitos.reduce((s, c) => s + c.n_condutores, 0)
+
   // Diâmetro mínimo
-  const diametro = diametroMinimo(area_condutores, n)
+  const diametro = diametroMinimo(area_condutores, n_condutores_total)
   const area_eletroduto = AREA_INTERNA_ELETRODUTO[diametro] ?? 0
   const taxa = area_eletroduto > 0 ? (area_condutores / area_eletroduto) * 100 : 999
-  const limite = limiteOcupacaoPct(n)
+  const limite = limiteOcupacaoPct(n_condutores_total)
 
   const ocupacao: OcupacaoEletroduto = {
     area_condutores_mm2: area_condutores,

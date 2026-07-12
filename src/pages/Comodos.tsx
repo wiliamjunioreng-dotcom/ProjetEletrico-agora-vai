@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import { verificarComodoNBR9 } from '../core/rules/nbr5410_s9'
 import { useProjectStore } from '../store/projectStore'
-import type { Comodo, TUE } from '../types/electrical'
+import type { Comodo, TUE, FaseType } from '../types/electrical'
 import { CATALOGO_LUMINARIAS, ILUMINANCIAS_REF, calcularLumens } from '../core/luminotecnico'
 import type { LampadaReal } from '../store/projectStore'
 import { calcIlumComodo, calcTugComodo } from '../core/engine'
@@ -352,6 +352,19 @@ export function Comodos() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm(f => ({ ...f, [k]: e.target.value }))
 
+  // Versão para campos numéricos que NUNCA podem ser negativos (potência,
+  // área, perímetro, comprimento). O atributo HTML min={0} só bloqueia o
+  // spinner — não impede digitação direta de "-500". Isso garante que
+  // valores inválidos não cheguem ao motor de cálculo mesmo digitados
+  // diretamente pelo teclado.
+  const updNumPositivo = (k: keyof Form) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const raw = e.target.value
+      // Permite campo vazio (usuário ainda digitando) e bloqueia só o negativo
+      const valor = raw === '' || raw === '-' ? raw : String(Math.max(0, parseFloat(raw) || 0))
+      setForm(f => ({ ...f, [k]: valor }))
+    }
+
   const presetsDoGrupo = CATALOGO_LAMPADAS.filter(l => l.grupo === lampGrupo)
 
   function addLampada() {
@@ -386,7 +399,18 @@ export function Comodos() {
     const d = form.tue_d.trim()
     const v = parseFloat(form.tue_v) || 0
     if (!d || v <= 0) return
-    setTues(prev => [...prev, { id: crypto.randomUUID(), descricao: d, potencia_va: v, fase_sugerida: v >= 4000 ? 'RS' : 'R' }])
+    // Fase sugerida: respeita a seleção do engenheiro (form.tue_fase)
+    // quando informada; cai para heurística por potência só como fallback
+    const fase_sugerida: FaseType =
+      form.tue_fase === 'tri' ? 'RST' :
+      form.tue_fase === 'bi'  ? 'RS'  :
+      v >= 4000 ? 'RS' : 'R'
+    setTues(prev => [...prev, {
+      id: crypto.randomUUID(), descricao: d, potencia_va: v,
+      fase_sugerida,
+      fase_ligacao: form.tue_fase,
+      tipo_carga:   form.tue_tipo,
+    }])
     setForm(f => ({ ...f, tue_d: '', tue_v: '' }))
   }
 
@@ -540,14 +564,14 @@ export function Comodos() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div className="fgroup">
               <label className="flabel">Área (m²)</label>
-              <input className="finput" type="number" value={form.area} onChange={upd('area')}
+              <input className="finput" type="number" value={form.area} onChange={updNumPositivo('area')}
                 placeholder="25.5" min={0.5} step={0.5}
                 style={{ borderColor: erros.area ? 'var(--red)' : '' }} />
               {erros.area && <div style={{ fontSize: 10, color: 'var(--red)' }}>{erros.area}</div>}
             </div>
             <div className="fgroup">
               <label className="flabel">Perímetro (m)</label>
-              <input className="finput" type="number" value={form.perim} onChange={upd('perim')}
+              <input className="finput" type="number" value={form.perim} onChange={updNumPositivo('perim')}
                 placeholder="20.0" min={1} step={0.5}
                 style={{ borderColor: erros.perim ? 'var(--red)' : '' }} />
               {erros.perim && <div style={{ fontSize: 10, color: 'var(--red)' }}>{erros.perim}</div>}
@@ -743,7 +767,7 @@ export function Comodos() {
             {/* Modo MANUAL */}
             {form.ilum_modo === 'manual' && (
               <div className="fgroup">
-                <input className="finput" type="number" value={form.ilum_manual} onChange={upd('ilum_manual')}
+                <input className="finput" type="number" value={form.ilum_manual} onChange={updNumPositivo('ilum_manual')}
                   placeholder={`NBR mín.: ${ilumNBR}VA`} min={0} step={50}
                   style={{ borderColor: ilumAbaixo ? 'var(--amber)' : '' }} />
                 <div className="fhint">Valor direto para dimensionamento do cabo (VA)</div>
@@ -825,7 +849,7 @@ export function Comodos() {
             )}
 
             {form.tug_modo === 'manual' && (
-              <input className="finput" type="number" value={form.tug_manual} onChange={upd('tug_manual')}
+              <input className="finput" type="number" value={form.tug_manual} onChange={updNumPositivo('tug_manual')}
                 placeholder={`NBR mín.: ${tugNBR}VA`} min={0} step={100}
                 style={{ borderColor: tugAbaixo ? 'var(--amber)' : '' }} />
             )}
@@ -843,7 +867,7 @@ export function Comodos() {
             <div style={{ display: 'flex', gap: 5 }}>
               <input className="finput" value={form.tue_d} onChange={upd('tue_d')}
                 placeholder="Ex: Motor 3cv, Chuveiro 5500W" style={{ flex: 1, minWidth: 0 }} />
-              <input className="finput" type="number" value={form.tue_v} onChange={upd('tue_v')}
+              <input className="finput" type="number" value={form.tue_v} onChange={updNumPositivo('tue_v')}
                 placeholder="VA" style={{ width: 66, flexShrink: 0 }} min={0} step={100} />
               <select className="fselect" value={form.tue_fase}
                 onChange={e => setForm(f => ({ ...f, tue_fase: e.target.value as any }))}

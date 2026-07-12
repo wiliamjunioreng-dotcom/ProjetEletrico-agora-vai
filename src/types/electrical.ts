@@ -105,6 +105,7 @@ export interface NormViolation {
 export interface Projeto {
   id: string
   nome: string
+  empresa: string
   endereco: string
   projetista: string
   crea: string
@@ -191,6 +192,10 @@ export interface TUE {
   descricao: string
   potencia_va: number
   fase_sugerida: FaseType
+  // Ligação elétrica declarada pelo engenheiro (1F/2F/3F)
+  fase_ligacao?: 'mono' | 'bi' | 'tri'
+  // Tipo de carga — usado para inferência de curva do disjuntor
+  tipo_carga?: 'resistivo' | 'motor' | 'ar_cond' | 'geral'
 }
 
 export interface LuminoData {

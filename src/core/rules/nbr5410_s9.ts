@@ -85,12 +85,12 @@ export function verificarTUGMinimas(comodo: Comodo): ResultadoNorma[] {
   }
 
   // ── §9.6.3.3 — Garagem ─────────────────────────────────────────
-  if (tipo === 'Garagem') {
+  if (tipo === 'Garagem' || tipo === 'Externo') {
     const min_garagem = 1
     if (tem_manual && n_tug_manual < min_garagem) {
       resultados.push(aviso(
         'NBR5410.9.6.3.3',
-        `${comodo.nome}: garagem requer mínimo 1 TUG`,
+        `${comodo.nome}: ${tipo === 'Garagem' ? 'garagem' : 'área externa'} requer mínimo 1 TUG (NBR §9.6.3.3)`,  
         `${N} §9.6.3.3 — TUG em garagens e áreas externas`,
         n_tug_manual, min_garagem
       ))

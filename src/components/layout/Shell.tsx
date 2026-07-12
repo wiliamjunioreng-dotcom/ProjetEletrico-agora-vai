@@ -5,6 +5,7 @@ import { useProjectStore } from '../../store/projectStore'
 
 const NAV = [
   { group: 'Configuração' },
+  { id: 'levantamento', label: '✨ Levantamento IA', step: '0', icon: 'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z' },
   { id: 'importar_dxf', label: '📐 Importar DXF', step: '0', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
   { id: 'projeto',       label: 'Dados do Projeto',   step: '1', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
   { id: 'comodos',       label: 'Previsão de Cargas', step: '2', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -75,7 +76,7 @@ export function Shell({ children }: { children: ReactNode }) {
   // Calcular passo atual para progress bar
   const STEP_MAP: Record<string, number> = {
     dashboard: 0, projeto: 1, comodos: 2, circuitos: 3,
-    importar_dxf: 0, balanceamento: 4, protecao: 5, auditoria: 5, qdfl: 6, unifilar: 6, materiais: 6,
+    levantamento: 0, importar_dxf: 0, balanceamento: 4, protecao: 5, auditoria: 5, qdfl: 6, unifilar: 6, materiais: 6,
     luminotecnico: 2, eletrodutos: 3, planta: 3, precos: 6, art: 6
   }
   const passo_atual = STEP_MAP[pagina_atual] ?? 0

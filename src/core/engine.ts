@@ -1,5 +1,5 @@
 import { inferirCurva } from './protectionDevicePhysics'
-// import { aplicarTodasRegras, statusGeral } from './rules'  // TODO: integrar na refatoração do engine
+// Regras NBR validadas via pipeline.ts → core/rules/index.ts (validarCircuito)
 // src/core/engine.ts
 // Motor de cálculo elétrico — física pura + auditoria normativa
 
@@ -55,16 +55,24 @@ export function calcDeltaU(
   if (secao_mm2 <= 0 || tensao_v <= 0 || comprimento_m <= 0) return 0
   const rho_20 = material === 'Cu' ? RHO_CU : RHO_AL
   const rho_t  = rho_20 * (1 + ALPHA_CU * (t_conductor - 20))
-  // Fórmulas NBR 5410 item 6.2.7
+  // Fórmulas NBR 5410 item 6.2.7 (Anexo C informativo)
+  // BUG CRÍTICO CORRIGIDO: bifásico (F-F, sem neutro — ex: chuveiro/
+  // ar-condicionado 220V tirado de duas fases 127V) é um circuito de
+  // 2 CONDUTORES — fisicamente idêntico ao monofásico para fins de
+  // queda de tensão (corrente vai por um condutor, volta pelo outro:
+  // fator 2). O fator √3 só é válido para circuitos TRIFÁSICOS reais
+  // (3 condutores, carga equilibrada nas 3 fases). Usar √3 (≈1,732)
+  // em vez de 2 SUBESTIMA a queda real em ~13,4% — podendo aprovar
+  // como conforme um circuito que na prática excede o limite de 4%/7%
+  // da NBR 5410. Isso afetava TODOS os circuitos bifásicos do sistema
+  // (chuveiro, ar-condicionado — os TUE mais comuns no Brasil).
+  // A função getVAkm() logo abaixo já tinha a fórmula correta
+  // (fator 2 para n_fases=2), confirmando que isto era de fato um bug.
   if (n_fases === 3) {
     // Trifásico: ΔU = √3 × ρ × L × Ib / (S × VL)
     return (Math.sqrt(3) * rho_t * comprimento_m * ib) / (secao_mm2 * tensao_v) * 100
   }
-  if (n_fases === 2) {
-    // Bifásico F-F (RS/ST/RT): ΔU = √3 × ρ × L × Ib / (S × VL)
-    return (Math.sqrt(3) * rho_t * comprimento_m * ib) / (secao_mm2 * tensao_v) * 100
-  }
-  // Monofásico F-N: ΔU = 2 × ρ × L × Ib / (S × VF)
+  // Monofásico (F-N) e Bifásico (F-F): ambos 2 condutores → fator 2
   return (2 * rho_t * comprimento_m * ib) / (secao_mm2 * tensao_v) * 100
 }
 
@@ -77,13 +85,9 @@ export function getVAkm(secao_mm2: number, n_fases: 1|2|3, material: 'Cu'|'Al' =
 }
 
 // ── Detecção de área molhada ─────────────────────────────────────
-export function ehAreaMolhada(descricao: string): boolean {
-  const palavras = ['banho','lavabo','cozinha','lavanderia','servico',
-                    'externo','varanda','sacada','garagem','churrasq',
-                    'jardim','quintal','piscina','area de serv']
-  const d = descricao.toLowerCase()
-  return palavras.some(p => d.includes(p))
-}
+// Detecção de área molhada — implementação centralizada em areaMolhada.ts
+import { ehAreaMolhada } from './areaMolhada'
+export { ehAreaMolhada }
 
 // Fs não aplicado no dimensionamento de cabos — NBR 5410 item 6.2.1
 
@@ -220,6 +224,29 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
 
   // 8. Disjuntor
   r.in_disj = getDisjuntor(r.ib_corr)
+
+  // 8b. Verificação de tripartida: In <= Iz' (NBR 5410 §5.1.3.1)
+  // Quando o disjuntor escolhido (próximo passo padrão acima de Ib) excede
+  // a capacidade EFETIVA do cabo após fatores de agrupamento/temperatura,
+  // a seção precisa subir — senão o disjuntor não protege o cabo contra
+  // sobrecarga (risco de incêndio). Mesma lógica de escalonamento usada
+  // para ΔU, aplicada aqui para a tripartida.
+  {
+    const SECOES_TRIP = [1.5,2.5,4,6,10,16,25,35,50,70,95,120,150,185,240]
+    let tentativas = 0
+    while (r.in_disj > r.iz_efetiva && tentativas < 12) {
+      const idx = SECOES_TRIP.indexOf(sec)
+      if (idx < 0 || idx >= SECOES_TRIP.length - 1) break
+      sec = SECOES_TRIP[idx + 1]
+      r.secao_fase   = sec
+      r.secao_neutro = sec
+      r.secao_pe     = getSecaoPE(sec)
+      r.iz_nominal   = getIz(sec, metodo, n_cond, e.material, e.isolacao)
+      r.iz_efetiva   = r.iz_nominal * r.ft * r.fa
+      tentativas++
+    }
+  }
+
   const sug = inferirCurva(e.tipo, e.descricao?.toLowerCase())
   r.curva   = sug.curva as string
 
@@ -371,14 +398,27 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
 export function calcularDemanda(
   circuitos: CircuitResult[],
   v_fase: number,
-  fp = 0.92
+  fp = 0.92,
+  sistema: 'Monofasico' | 'Bifasico' | 'Trifasico' = 'Bifasico'
 ): DemandaResult {
   const ci = circuitos.filter(c => c.potencia_va > 0)
   const va_total = ci.reduce((s, c) => s + c.potencia_va, 0)
   const ci_kw    = va_total / 1000
   const fd       = getFatorDemandaCEMIG(ci_kw)
   const dem_kw   = ci_kw * fd
-  const i_dem    = (dem_kw * 1000 / fp) / (2 * v_fase)
+  // Corrente de demanda — divisor depende do número de fases.
+  // BUG CORRIGIDO: antes usava sempre (2 × v_fase), correto só para
+  // bifásico. Resultava em disjuntor geral SUPERDIMENSIONADO (~50%
+  // a mais) em projetos trifásicos, e em erro (subdimensionado) em
+  // monofásicos puros.
+  //   Monofásico: I = S / V_fase
+  //   Bifásico:   I = S / (2 × V_fase)   — duas fases sem referência comum
+  //   Trifásico:  I = S / (√3 × V_linha) = S / (3 × V_fase)  [balanceado]
+  const divisor_tensao =
+    sistema === 'Monofasico' ? v_fase :
+    sistema === 'Trifasico'  ? 3 * v_fase :
+    2 * v_fase  // Bifasico (padrão/fallback)
+  const i_dem    = (dem_kw * 1000 / fp) / divisor_tensao
   const in_geral = getDisjuntor(i_dem * 1.1)
   const tipo_lig = getTipoLigacaoCEMIG(dem_kw, v_fase)
   const n_at     = ci.length

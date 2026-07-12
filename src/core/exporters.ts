@@ -9,6 +9,7 @@ import type { DemandaResult } from '../types/electrical'
 // ── Tipos ─────────────────────────────────────────────────────
 interface ProjetoExport {
   nome: string
+  empresa?: string
   endereco: string
   projetista: string
   crea: string
@@ -214,7 +215,7 @@ export function exportarMemorial(
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Memorial Descritivo — ${projeto.nome}</title>
+<title>Memorial Descritivo — ${projeto.empresa ? projeto.empresa + " — " : ""}${projeto.nome}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Times New Roman', serif; font-size: 12pt; color: #000;
@@ -247,12 +248,14 @@ export function exportarMemorial(
   </button>
 </div>
 
+${projeto.empresa ? `<p style="text-align:center;font-weight:700;font-size:13pt;color:#1B2A3B;margin-bottom:2pt">${projeto.empresa}</p>` : ''}
 <h1>MEMORIAL DESCRITIVO E DE CÁLCULO<br>INSTALAÇÃO ELÉTRICA RESIDENCIAL</h1>
 <p style="text-align:center;margin:6pt 0">NBR 5410:2004+Em1:2008 | CEMIG ND-5.1 | NR-10 | NBR 5419:2015</p>
 
 <h2>1. IDENTIFICAÇÃO DA OBRA</h2>
 <table>
   <tr><th style="width:35%">Item</th><th>Dados</th></tr>
+  <tr><td class="l"><b>Empresa</b></td><td class="l">${projeto.empresa || '—'}</td></tr>
   <tr><td class="l"><b>Nome do Projeto</b></td><td class="l">${projeto.nome}</td></tr>
   <tr><td class="l"><b>Endereço</b></td><td class="l">${projeto.endereco}</td></tr>
   <tr><td class="l"><b>Responsável Técnico</b></td><td class="l">${projeto.projetista}</td></tr>

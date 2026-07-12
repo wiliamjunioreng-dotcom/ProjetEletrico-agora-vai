@@ -16,6 +16,7 @@ import type { DemandaResult } from '../types/electrical'
 
 export interface DadosPrancha {
   projeto_nome:  string
+  empresa?:      string
   projetista:    string
   crea:          string
   data:          string
@@ -54,7 +55,7 @@ export function gerarPranchaHTML(dados: DadosPrancha): string {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Prancha — ${dados.projeto_nome}</title>
+  <title>Prancha — ${dados.empresa ? dados.empresa + ' — ' : ''}${dados.projeto_nome}</title>
   <style>
     @page { size: A3 landscape; margin: 15mm; }
     * { box-sizing: border-box; }
@@ -104,6 +105,7 @@ export function gerarPranchaHTML(dados: DadosPrancha): string {
 <!-- Cabeçalho -->
 <div class="cabecalho">
   <div class="cab-info">
+    ${dados.empresa ? `<div style="font-size:9pt;font-weight:700;color:#1B2A3B;letter-spacing:.04em;margin-bottom:1mm">${dados.empresa}</div>` : ''}
     <div class="cab-projeto">Projeto Elétrico — ${dados.projeto_nome}</div>
     <div class="cab-linha">📍 ${dados.endereco || 'Endereço não informado'}</div>
     <div class="cab-linha">👤 Responsável Técnico: ${dados.projetista} &nbsp;|&nbsp; CREA: ${dados.crea}</div>
@@ -114,7 +116,7 @@ export function gerarPranchaHTML(dados: DadosPrancha): string {
     <div class="selo"><label>Escala</label>1:50</div>
     <div class="selo"><label>Folha</label>01/01</div>
     <div class="selo" style="background:#1B2A3B;color:white;font-weight:700;font-size:8pt;text-align:center;padding:4mm">
-      ProjetEletrico
+      ${dados.empresa || 'ProjetEletrico'}
     </div>
   </div>
 </div>
@@ -169,7 +171,7 @@ ${dados.svg_planta ? `
 <!-- Rodapé -->
 <div class="rodape">
   <span>Projeto dimensionado conforme ABNT NBR 5410:2004+Em1:2008 | IEC 60898-1 | IEC 60364-4-41</span>
-  <span>ProjetEletrico — gerado em ${data_fmt}</span>
+  <span>${dados.empresa || 'ProjetEletrico'} — gerado em ${data_fmt}</span>
 </div>
 
 </body>

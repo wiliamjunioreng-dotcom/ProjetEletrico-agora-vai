@@ -10,6 +10,7 @@ import { Protecao }       from './pages/Protecao'
 import { QDFL }           from './pages/QDFL'
 import Auditoria          from './pages/Auditoria'
 import ImportarDXF        from './pages/ImportarDXF'
+import LevantamentoIA     from './pages/LevantamentoIA'
 import { Unifilar }       from './pages/Unifilar'
 import { Materiais }      from './pages/Materiais'
 import { Luminotecnico }  from './pages/Luminotecnico'
@@ -27,6 +28,7 @@ const PAGES: Record<string, React.ComponentType> = {
   protecao:      Protecao,
   auditoria:     Auditoria,
   importar_dxf:  ImportarDXF,
+  levantamento:  LevantamentoIA,
   qdfl:          QDFL,
   unifilar:      Unifilar,
   materiais:     Materiais,

@@ -55,10 +55,11 @@ describe('buildGrupoEletroduto — múltiplos circuitos', () => {
   })
 })
 
-describe('limiteOcupacaoPct', () => {
-  it('1 circuito: limite 53% (NBR §6.1.5.2)', () => expect(limiteOcupacaoPct(1)).toBe(53))
-  it('2+ circuitos: limite 40%', () => expect(limiteOcupacaoPct(2)).toBe(40))
-  it('3+ cabos: limite 40%', () => {
+describe('limiteOcupacaoPct — NBR 5410 §6.2.11.1.6 (regra por CONDUTOR)', () => {
+  it('1 condutor: limite 53%', () => expect(limiteOcupacaoPct(1)).toBe(53))
+  it('2 condutores: limite 31% (era 40% — corrigido conforme a norma)', () =>
+    expect(limiteOcupacaoPct(2)).toBe(31))
+  it('3+ condutores: limite 40% (caso típico: 1 circuito mono já tem 3 condutores F+N+PE)', () => {
     expect(limiteOcupacaoPct(3)).toBe(40)
     expect(limiteOcupacaoPct(10)).toBe(40)
   })

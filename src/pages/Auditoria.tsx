@@ -18,6 +18,8 @@ import { useMemo, useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import { buildAllViewModels } from '../store/circuitViewModel'
 import { verificarProjetoNBR9 } from '../core/rules/nbr5410_s9'
+import { resolverCircuito } from '../core/pipeline'
+import type { CircuitoPipelined } from '../core/pipeline'
 
 interface ItemAuditoria {
   nivel:    'critico' | 'atencao' | 'sugestao' | 'ok'
@@ -51,7 +53,7 @@ const CORES = {
 const ICONES = { critico: '⛔', atencao: '⚠', sugestao: '💡', ok: '✓' }
 
 export default function Auditoria() {
-  const { circuitos_calc, comodos, projeto, setPagina, setCircuitoFoco, updateCircuito, historico } = useProjectStore()
+  const { circuitos_raw, comodos, projeto, setPagina, setCircuitoFoco, updateCircuito, historico } = useProjectStore()
   const [showTimeline, setShowTimeline] = useState(false)
 
   // Aplicar correção de um clique
@@ -64,16 +66,49 @@ export default function Auditoria() {
     })
   }
 
-  // Montar mapa de pipeline para o viewModel
+  // ── Montar mapa de pipeline REAL ──────────────────────────────
+  // BUG CRÍTICO CORRIGIDO: a versão anterior procurava uma propriedade
+  // `.pipeline` em circuitos_calc que NUNCA é definida em lugar nenhum
+  // do código (circuitos_calc vem de engine.ts/dimensionarCircuito,
+  // que não anexa dados de pipeline). Isso fazia pipelineMap ficar
+  // SEMPRE VAZIO, e por consequência vm.resultado SEMPRE null —
+  // ou seja, nenhum alerta crítico de proteção/curva/fator de
+  // segurança jamais disparava na Auditoria, silenciosamente.
+  // Corrigido para chamar resolverCircuito() diretamente, igual ao
+  // padrão já usado (corretamente) em Circuitos.tsx.
   const pipelineMap = useMemo(() => {
-    const m = new Map()
-    circuitos_calc.forEach(c => { if ((c as any).pipeline) m.set(c.id, (c as any).pipeline) })
+    const m = new Map<string, CircuitoPipelined>()
+    circuitos_raw.filter((r: any) => r.tipo !== 'RESERVA').forEach((raw: any) => {
+      if ((raw.potencia_va ?? 0) > 0) {
+        try {
+          m.set(raw.id, resolverCircuito({
+            id: raw.id, descricao: raw.descricao, tipo: raw.tipo,
+            fase: raw.fase, potencia_va: raw.potencia_va,
+            potencia_real_w: raw.potencia_real_w,
+            comprimento_m: raw.comprimento_m ?? 0,
+            n_agrup: raw.n_agrup ?? 1,
+            v_fase: projeto.v_fase,
+            metodo: projeto.metodo_instalacao,
+            isolacao: projeto.isolacao as any,
+            material: projeto.material_cabo as any,
+            t_amb: projeto.t_amb,
+            du_max_pct: projeto.du_max_pct,
+            du_ramal_pct: projeto.du_ramal_pct,
+            icc_rede_ka: projeto.icc_rede_ka,
+          }))
+        } catch { /* circuito inválido — ignora */ }
+      }
+    })
     return m
-  }, [circuitos_calc])
+  }, [circuitos_raw, projeto])
 
   const vms = useMemo(() =>
-    buildAllViewModels(circuitos_calc as any, pipelineMap, projeto.du_max_pct ?? 4),
-    [circuitos_calc, pipelineMap, projeto.du_max_pct]
+    buildAllViewModels(
+      (circuitos_raw as any[]).filter(r => r.tipo !== 'RESERVA'),
+      pipelineMap,
+      projeto.du_max_pct ?? 4
+    ),
+    [circuitos_raw, pipelineMap, projeto.du_max_pct]
   )
 
   // ── Coletar todos os itens de auditoria ──────────────────────

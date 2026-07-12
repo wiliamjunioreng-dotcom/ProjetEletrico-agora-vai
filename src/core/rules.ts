@@ -84,12 +84,11 @@ export function regra_sobrecarga(in_disj: number, iz_nominal: number): Resultado
 }
 
 // NBR 5410 §5.1.3.6.1 — IDR obrigatório em áreas molhadas
+import { ehAreaMolhada } from './areaMolhada'
+
 export function regra_idr_area_molhada(descricao: string, tem_idr: boolean): ResultadoNorma {
   const norma = 'NBR 5410:2004 item 5.1.3.6.1'
-  const AREAS_MOLHADAS = ['banho','lavabo','cozinha','lavanderia','servico',
-    'externo','varanda','sacada','garagem','churrasq','jardim','piscina']
-  const desc_lower = descricao.toLowerCase()
-  const eh_molhado = AREAS_MOLHADAS.some(a => desc_lower.includes(a))
+  const eh_molhado = ehAreaMolhada(descricao)
 
   if (eh_molhado && !tem_idr) {
     return erro(

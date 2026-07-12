@@ -133,6 +133,13 @@ export interface EntradaCircuito {
   readonly du_max_pct:     number
   readonly du_ramal_pct:   number
   readonly icc_rede_ka:    number
+  // Tensão de referência FIXA do ponto de entrega (não confundir com
+  // v_fase do circuito específico, que varia por tipo de carga).
+  // O Icc presumido informado pela concessionária é referenciado a
+  // ESSA tensão fixa de entrada, não à tensão de cada circuito
+  // terminal. Quando ausente, assume v_fase × √3 (convenção trifásica
+  // padrão da maioria dos padrões de entrada CEMIG).
+  readonly v_linha_ref?:   number
 }
 
 // ── Artefatos intermediários (imutáveis) ──────────────────────────
@@ -167,6 +174,9 @@ export interface ArtProtecao {
   readonly curva_adequada: boolean
   readonly curva_sugerida: 'B'|'C'|'D'
   readonly justificativa_curva: string
+  // Seção final após garantir tripartida In <= Iz' (NBR §5.1.3.1).
+  // Igual a q.secao_final quando nenhum ajuste foi necessário.
+  readonly secao_protegida_mm2: number
 }
 export interface ArtCurto {
   readonly icc_max_ka: number; readonly icc_min_ka: number
@@ -200,9 +210,7 @@ export interface CircuitoPipelined {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
-const MOLHADAS = ['banho','lavabo','banheiro','cozinha','lavanderia',
-  'servico','externo','varanda','sacada','garagem','churrasq','piscina','jardim']
-const isMolhado = (d: string) => MOLHADAS.some(a => d.toLowerCase().includes(a))
+import { ehAreaMolhada as isMolhado } from './areaMolhada'
 
 // ── Estágio 1: Tensão ─────────────────────────────────────────────
 export function stageTensao(e: EntradaCircuito): [ArtTensao, TracoEstagio] {
@@ -341,7 +349,13 @@ export function stageQueda(
   const ALPHA   = e.material === 'Cu' ? 0.00393 : 0.00403
   const T_OP    = 60  // temperatura de operação simplificada
   const rho_t   = RHO_20 * (1 + ALPHA * (T_OP - 20))
-  const k_nfases = t.n_fases === 1 ? 2 : Math.sqrt(3)
+  // BUG CRÍTICO CORRIGIDO: bifásico (n_fases=2, F-F sem neutro — ex:
+  // chuveiro/ar-condicionado 220V) é circuito de 2 condutores, igual
+  // ao monofásico para queda de tensão — fator 2. √3 só vale para
+  // trifásico real (3 condutores). Usar √3 no bifásico subestimava
+  // a queda em ~13,4%. Mesmo bug existia em engine.ts:calcDeltaU()
+  // (corrigido na mesma sessão) — os dois motores ficam consistentes.
+  const k_nfases = t.n_fases === 3 ? Math.sqrt(3) : 2
 
   const metodo = e.metodo as any
   let sec = s.secao_final
@@ -403,7 +417,9 @@ export function stageQueda(
 export function stageProtecao(
   e: EntradaCircuito,
   c: ArtCorrente,
-  q: ArtQueda
+  q: ArtQueda,
+  t: ArtTensao,
+  f: ArtFatores
 ): [ArtProtecao, TracoEstagio] {
   const tb      = new TraceBuilder('stageProtecao', 6)
   const in_disj = getDisjuntor(c.ib)
@@ -412,10 +428,33 @@ export function stageProtecao(
   const curva = sug_curva.curva
   const idr     = isMolhado(e.descricao)
   const idr_in  = idr ? getIDR(in_disj) : 0
-  // PE — NBR 5410:2004 Tabela 54
-  const sec_pe  = q.secao_final <= 16 ? q.secao_final
-                : q.secao_final <= 35 ? 16 : q.secao_final / 2
-  const sec_neu = q.secao_final  // neutro = fase (circuitos terminais)
+
+  // ── Tripartida: In <= Iz' (NBR 5410 §5.1.3.1) ──────────────────
+  // O disjuntor padrão (próximo passo comercial acima de Ib) pode
+  // exceder a capacidade EFETIVA do cabo após fatores de agrupamento/
+  // temperatura. Quando isso ocorre, a seção precisa subir — senão
+  // o disjuntor não protege o cabo contra sobrecarga térmica.
+  // Mesma lógica já aplicada em engine.ts — mantém os dois motores
+  // de cálculo (engine.ts e pipeline.ts) consistentes entre si.
+  let secao_protegida = q.secao_final
+  let iz_efetiva_corrigida = q.iz_efetiva_final
+  {
+    const SECOES_TRIP = [1.5,2.5,4,6,10,16,25,35,50,70,95,120,150,185,240]
+    let tentativas = 0
+    while (in_disj > iz_efetiva_corrigida && tentativas < 12) {
+      const idx = SECOES_TRIP.indexOf(secao_protegida)
+      if (idx < 0 || idx >= SECOES_TRIP.length - 1) break
+      secao_protegida = SECOES_TRIP[idx + 1]
+      const iz_nom = getIz(secao_protegida, e.metodo as any, t.n_cond, e.material, e.isolacao)
+      iz_efetiva_corrigida = Math.round(iz_nom * f.ft * f.fa * 10) / 10
+      tentativas++
+    }
+  }
+
+  // PE — NBR 5410:2004 Tabela 54 (usa a seção JÁ corrigida pela tripartida)
+  const sec_pe  = secao_protegida <= 16 ? secao_protegida
+                : secao_protegida <= 35 ? 16 : secao_protegida / 2
+  const sec_neu = secao_protegida  // neutro = fase (circuitos terminais)
 
   tb.decisao('in_disj', in_disj,
     { ib: c.ib },
@@ -439,6 +478,7 @@ export function stageProtecao(
     curva_adequada: sug_curva.curva === curva,
     curva_sugerida: sug_curva.curva,
     justificativa_curva: sug_curva.justificativa,
+    secao_protegida_mm2: secao_protegida,
   }, tb.build()]
 }
 
@@ -462,10 +502,25 @@ export function stageCurto(
   const T_CC   = 160  // temperatura de curto-circuito (PVC)
   const rho_cc = RHO_20 * (1 + ALPHA * (T_CC - 20))
 
-  const z_rede_ohm = t.tensao_v / (Math.sqrt(3) * e.icc_rede_ka * 1000)
-  const r_cabo     = (2 * rho_cc * e.comprimento_m) / q.secao_final
-  const z_total    = z_rede_ohm + r_cabo
+  // BUG CORRIGIDO: a impedância da rede da concessionária (z_rede_ohm)
+  // é propriedade FÍSICA FIXA do transformador/ramal de entrada —
+  // não pode variar conforme qual circuito terminal está sendo
+  // analisado. O engenheiro só tem acesso a UM valor de Icc presumido
+  // (kA), fornecido pela concessionária referenciado à tensão de
+  // entrada (v_linha_ref) — nunca à tensão de cada circuito interno
+  // (127V mono vs 220V bifásico variam por circuito; a rede não).
+  // Antes usava t.tensao_v (variável por circuito), dando z_rede
+  // diferente para o mesmo ponto de entrega dependendo do tipo de
+  // carga analisada — fisicamente incorreto.
+  const v_ref       = e.v_linha_ref ?? (e.v_fase * Math.sqrt(3))
+  const z_rede_ohm  = v_ref / (Math.sqrt(3) * e.icc_rede_ka * 1000)
+  const r_cabo      = (2 * rho_cc * e.comprimento_m) / q.secao_final
+  const z_total     = z_rede_ohm + r_cabo
 
+  // Icc no ponto do circuito usa a TENSÃO LOCAL (t.tensao_v) — isso
+  // está correto, pois a corrente de falta disponível em cada ponto
+  // realmente depende da tensão ali. Só a impedância de FONTE (acima)
+  // precisa ser fixa.
   const icc_max_ka = t.tensao_v / (Math.sqrt(3) * z_rede_ohm) / 1000
   const icc_min_ka = t.tensao_v / (Math.sqrt(3) * z_total)    / 1000
   const icc_min_a  = icc_min_ka * 1000
@@ -509,9 +564,12 @@ export function stageCurto(
     z_cabo_mohm: Math.round(r_cabo * 1000 * 100) / 100,
     // Verificação de pior caso (loop completo com cabo quente e tensão mínima)
     protecao_funcional: ok_atuacao,
+    // Usa a seção PROTEGIDA (pós-correção de tripartida), não a pré-correção —
+    // senão o comprimento máximo calculado fica pessimista/inconsistente
+    // em relação ao cabo realmente especificado no projeto.
     comprimento_max_m:  comprimentoMaximo(
-      q?.secao_final ?? 2.5,
-      q?.secao_final ?? 2.5,
+      p?.secao_protegida_mm2 ?? q?.secao_final ?? 2.5,
+      p?.secao_protegida_mm2 ?? q?.secao_final ?? 2.5,
       t.tensao_v, 'PVC', p.curva as 'B'|'C'|'D', p.in_disj
     ).comprimento_max_m,
     fator_seguranca: ok_atuacao
@@ -539,9 +597,10 @@ export function stageJulgamento(
   // Seção consolidada: máximo entre todos os critérios
   // Garante que a decisão final é sempre a mais restritiva
   const secao_consolidada = Math.max(
-    s.secao_final,      // critério Iz (físico)
-    q.secao_final,      // critério ΔV (convergência)
-    s.secao_min_projeto // piso normativo
+    s.secao_final,           // critério Iz (físico)
+    q.secao_final,           // critério ΔV (convergência)
+    s.secao_min_projeto,     // piso normativo
+    p.secao_protegida_mm2    // critério tripartida In<=Iz' (proteção)
   )
 
   if (secao_consolidada > q.secao_final) {
@@ -597,7 +656,7 @@ export function resolverCircuito(entrada: EntradaCircuito): CircuitoPipelined {
   const [fatores,   t3] = stageFatores(entrada, corrente)
   const [secao,     t4] = stageSecao(entrada, tensao, fatores)
   const [queda,     t5] = stageQueda(entrada, tensao, corrente, fatores, secao)
-  const [protecao,  t6] = stageProtecao(entrada, corrente, queda)
+  const [protecao,  t6] = stageProtecao(entrada, corrente, queda, tensao, fatores)
   const [curto,     t7] = stageCurto(entrada, queda, tensao, protecao)
   // Coletar erros físicos dos estágios anteriores para passar ao julgamento
   const erros_fisicos_secao: import('./rules/context').ResultadoNorma[] =

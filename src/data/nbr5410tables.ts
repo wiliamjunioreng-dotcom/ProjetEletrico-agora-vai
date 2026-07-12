@@ -101,23 +101,25 @@ export function getFt(t_amb: number, isolacao: IsolacaoCabo = 'PVC'): number {
 }
 
 // ── Tabela 42 — Fator de agrupamento Fa ─────────────────────────
-const FA_TABLE: Record<number, number> = {
-  1:1.00, 2:0.80, 3:0.70, 4:0.65, 5:0.60,
-  6:0.57, 7:0.54, 8:0.52, 9:0.50, 10:0.48,
-  12:0.45, 14:0.43, 16:0.41, 18:0.39, 20:0.38,
-}
-
+// NBR 5410:2004 Tabela 42, linha 1 (condutores agrupados em feixe:
+// sobre superfície, embutidos ou em conduto fechado — o caso padrão
+// de instalação predial em eletroduto).
+// CORRIGIDO: a norma define DEGRAUS (faixas fixas), não curva contínua.
+//   n=9..11 → 0,50 | n=12..15 → 0,45 | n=16..19 → 0,41 | n>=20 → 0,38
 export function getFa(n_circ: number): number {
-  const keys = Object.keys(FA_TABLE).map(Number).sort((a, b) => a - b)
-  if (n_circ <= 1) return 1.0
-  if (n_circ >= keys[keys.length - 1]) return FA_TABLE[keys[keys.length - 1]]
-  for (let i = 0; i < keys.length - 1; i++) {
-    const n1 = keys[i], n2 = keys[i + 1]
-    if (n_circ >= n1 && n_circ <= n2) {
-      return FA_TABLE[n1] + (FA_TABLE[n2] - FA_TABLE[n1]) * (n_circ - n1) / (n2 - n1)
-    }
-  }
-  return 0.36
+  const n = Math.max(1, Math.floor(n_circ))
+  if (n === 1)  return 1.00
+  if (n === 2)  return 0.80
+  if (n === 3)  return 0.70
+  if (n === 4)  return 0.65
+  if (n === 5)  return 0.60
+  if (n === 6)  return 0.57
+  if (n === 7)  return 0.54
+  if (n === 8)  return 0.52
+  if (n <= 11)  return 0.50
+  if (n <= 15)  return 0.45
+  if (n <= 19)  return 0.41
+  return 0.38
 }
 
 // ── Tabela 54 — Seção do PE ──────────────────────────────────────
