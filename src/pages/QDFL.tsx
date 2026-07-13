@@ -4,7 +4,7 @@ import { abrirPrancha as abrirPranchaInternal } from '../core/pranchaExport'
 import { useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import {
-  exportarQDFL_XLSX, exportarQDFL_CSV, exportarMemorial,
+  exportarQDFL_XLSX, exportarQDFL_CSV, exportarMemorial, exportarManualUsuario,
   exportarQDFL_Python, isServerMode
 } from '../core/exporters'
 
@@ -95,6 +95,11 @@ export function QDFL() {
     mostrarMsg('Memorial aberto em nova aba — use Ctrl+P para salvar como PDF', 'info')
   }
 
+  function handleManualUsuario() {
+    exportarManualUsuario(projeto as any, circuitos_calc)
+    mostrarMsg('Manual do usuário gerado — NBR 5410 §6.1.8.3', 'info')
+  }
+
   function handleSalvar() {
     const json = salvarJSON()
     const blob = new Blob([json], { type: 'application/json' })
@@ -162,6 +167,9 @@ export function QDFL() {
         </button>
         <button className="btn success" onClick={handleMemorial}>
           📄 Memorial PDF
+        </button>
+        <button className="btn" onClick={handleManualUsuario} title="NBR 5410 §6.1.8.3 — documento para o usuário final da instalação">
+          📘 Manual do Usuário
         </button>
       </div>
     </div>

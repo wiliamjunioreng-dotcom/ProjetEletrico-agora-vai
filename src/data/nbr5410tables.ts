@@ -122,6 +122,33 @@ export function getFa(n_circ: number): number {
   return 0.38
 }
 
+// ── Tabela 41 — Fator de correção por resistividade térmica do solo ──
+// Aplicável a métodos de instalação enterrados (D1, D2). Referência:
+// resistividade padrão da NBR 5410 = 2,5 K.m/W → Fsolo = 1,000.
+// Solo mais úmido (menor resistividade) conduz melhor o calor →
+// fator > 1 (cabo suporta MAIS corrente). Solo seco/arenoso → fator < 1.
+const FSOLO_TABLE: Record<number, number> = {
+  0.5: 1.28, 0.7: 1.20, 1.0: 1.18, 1.5: 1.10, 2.0: 1.05,
+  2.5: 1.00, 3.0: 0.96, 3.5: 0.92,
+}
+
+// getFsolo — fator de correção por resistividade térmica do solo (K.m/W)
+// Só se aplica a métodos enterrados; para os demais métodos retorna 1.0
+// (a resistividade do solo não afeta cabos ao ar livre ou embutidos em parede).
+export function getFsolo(resistividade_km_w: number, metodo: MetodoInstalacao): number {
+  if (metodo !== 'D1' && metodo !== 'D2') return 1.0
+  const chaves = Object.keys(FSOLO_TABLE).map(Number).sort((a, b) => a - b)
+  if (resistividade_km_w <= chaves[0]) return FSOLO_TABLE[chaves[0]]
+  if (resistividade_km_w >= chaves[chaves.length - 1]) return FSOLO_TABLE[chaves[chaves.length - 1]]
+  for (let i = 0; i < chaves.length - 1; i++) {
+    const r1 = chaves[i], r2 = chaves[i + 1]
+    if (resistividade_km_w >= r1 && resistividade_km_w <= r2) {
+      return FSOLO_TABLE[r1] + (FSOLO_TABLE[r2] - FSOLO_TABLE[r1]) * (resistividade_km_w - r1) / (r2 - r1)
+    }
+  }
+  return 1.0
+}
+
 // ── Tabela 54 — Seção do PE ──────────────────────────────────────
 export function getSecaoPE(secao_fase: number): number {
   if (secao_fase <= 16) return secao_fase

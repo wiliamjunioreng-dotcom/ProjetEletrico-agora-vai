@@ -4,7 +4,7 @@ import { inferirCurva } from './protectionDevicePhysics'
 // Motor de cálculo elétrico — física pura + auditoria normativa
 
 import {
-  getIz, getFt, getFa, getSecaoPE, getSecaoMinimaPorIz,
+  getIz, getFt, getFa, getFsolo, getSecaoPE, getSecaoMinimaPorIz,
   getDisjuntor, getIDR, SECAO_MINIMA, getFatorDemandaCEMIG,
   getReservasQD, getTamanhoQD, getTipoLigacaoCEMIG, POT_TOMADA
 } from '../data/nbr5410tables'
@@ -110,6 +110,10 @@ export interface CircuitInput {
   du_max: number
   du_ramal: number
   icc_rede_ka?: number
+  // Resistividade térmica do solo (K.m/W) — só relevante para métodos
+  // enterrados D1/D2 (NBR 5410 Tabela 41). Se omitido, assume o padrão
+  // normativo 2,5 K.m/W (Fsolo = 1,0, sem correção).
+  resistividade_solo_km_w?: number
   // Override do engenheiro (decisão travada, sistema respeita)
   override_secao_mm2?: number
   override_in_disj?: number
@@ -187,6 +191,10 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
   // 3. Fatores de correção (NBR 5410 Tabelas 40 e 42)
   r.ft = getFt(e.t_amb, e.isolacao)
   r.fa = getFa(e.n_agrup)
+  // Tabela 41 — correção por resistividade térmica do solo, só ativa
+  // para métodos enterrados (D1/D2); retorna 1.0 para os demais e
+  // quando não informado (assume padrão normativo 2,5 K.m/W)
+  const fsolo = getFsolo(e.resistividade_solo_km_w ?? 2.5, e.metodo as any)
   // Fs NÃO é usado para dimensionar o cabo — só para previsão de carga total
   // O cabo deve suportar a corrente máxima do circuito (NBR 5410 item 6.2.1)
   r.fs = 1.0
@@ -220,7 +228,7 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
   r.secao_neutro = sec
   r.secao_pe     = getSecaoPE(sec)
   r.iz_nominal   = getIz(sec, metodo, n_cond, e.material, e.isolacao)
-  r.iz_efetiva   = r.iz_nominal * r.ft * r.fa
+  r.iz_efetiva   = r.iz_nominal * r.ft * r.fa * fsolo
 
   // 8. Disjuntor
   r.in_disj = getDisjuntor(r.ib_corr)
@@ -242,7 +250,7 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
       r.secao_neutro = sec
       r.secao_pe     = getSecaoPE(sec)
       r.iz_nominal   = getIz(sec, metodo, n_cond, e.material, e.isolacao)
-      r.iz_efetiva   = r.iz_nominal * r.ft * r.fa
+      r.iz_efetiva   = r.iz_nominal * r.ft * r.fa * fsolo
       tentativas++
     }
   }
@@ -498,6 +506,16 @@ export interface LuminoInput {
   refl_piso: number
   luminaria_lm: number
   luminaria_pot_w: number
+  // Índice de Reprodução de Cor da luminária (Ra/CRI, 0-100).
+  // NBR ISO/CIE 8995-1 exige Ra ≥ 80 para ambientes de trabalho
+  // contínuo (escritórios, oficinas) — abaixo disso, cores parecem
+  // distorcidas sob a luz artificial, o que cansa a visão em jornadas
+  // longas. Opcional: se omitido, a verificação não é aplicada
+  // (não force um valor que o engenheiro não tem em mãos).
+  luminaria_ra?: number
+  // Ambiente é de trabalho contínuo? (escritório, oficina, bancada)
+  // Determina se o Ra<80 vira aviso ou é só informativo.
+  trabalho_continuo?: boolean
 }
 
 export interface LuminoResult {
@@ -511,6 +529,9 @@ export interface LuminoResult {
   dpf: number          // densidade de potência W/m²
   arranjos: Array<{desc: string, espac_x: number, espac_y: number}>
   string_circuito: string
+  // Verificação de reprodução de cor — NBR ISO/CIE 8995-1
+  ra_conforme?: boolean       // null/undefined se Ra não foi informado
+  ra_aviso?: string
 }
 
 export function calcLuminotecnico(comp: number, larg: number, input: LuminoInput): LuminoResult {
@@ -565,10 +586,25 @@ export function calcLuminotecnico(comp: number, larg: number, input: LuminoInput
 
   const string_circuito = `ILUM: ${n_lum}x${input.luminaria_pot_w}W`
 
+  // NBR ISO/CIE 8995-1 — Ra ≥ 80 obrigatório em ambientes de trabalho
+  // contínuo. Só avalia se o engenheiro informou o Ra da luminária —
+  // não assumimos um valor que não foi declarado.
+  let ra_conforme: boolean | undefined
+  let ra_aviso: string | undefined
+  if (input.luminaria_ra !== undefined) {
+    ra_conforme = input.luminaria_ra >= 80
+    if (!ra_conforme && input.trabalho_continuo) {
+      ra_aviso = `Ra=${input.luminaria_ra} < 80 — NBR ISO/CIE 8995-1 exige Ra≥80 para ambientes de trabalho contínuo. Cores parecerão distorcidas sob esta luz; considere trocar a luminária.`
+    } else if (!ra_conforme) {
+      ra_aviso = `Ra=${input.luminaria_ra} < 80 — aceitável para ambientes de passagem, mas abaixo do recomendado (Ra≥80) para permanência prolongada.`
+    }
+  }
+
   return { k: Math.round(k*100)/100, cu: Math.round(cu*1000)/1000, fm,
            n_raw: Math.round(n_raw*10)/10, n_luminarias: n_lum,
            pot_total_w: pot_total, em_real: Math.round(em_real),
-           dpf: Math.round(dpf*10)/10, arranjos, string_circuito }
+           dpf: Math.round(dpf*10)/10, arranjos, string_circuito,
+           ra_conforme, ra_aviso }
 }
 
 // ── Curto-circuito IEC 60909:2016 ────────────────────────────────

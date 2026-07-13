@@ -431,3 +431,121 @@ export function isServerMode(): boolean {
     return false
   }
 }
+
+// ── Manual do Usuário — NBR 5410 §6.1.8.3 ────────────────────────
+// A norma exige que instalações operadas por leigos sejam entregues
+// com documentação explicando ao morador/usuário como usar o quadro
+// com segurança — em especial, qual a potência máxima permitida em
+// cada circuito e a advertência explícita contra trocar disjuntores
+// por valores maiores que o projeto previu (o erro mais comum e mais
+// perigoso que um leigo pode cometer: "queimou, troquei por um maior").
+export function exportarManualUsuario(
+  projeto: ProjetoExport,
+  circuitos: CircuitResult[],
+): void {
+  const ci = circuitos.filter(c => c.potencia_va > 0)
+  const data = new Date().toLocaleDateString('pt-BR')
+
+  const linhasCircuitos = ci.map((c, i) => {
+    // Potência máxima recomendada = In × V × fator de segurança prático (0,9)
+    // — não é a capacidade teórica do cabo, é o que o leigo pode ligar
+    // com folga de segurança sem se aproximar do limite de disparo.
+    const pot_max_va = Math.round(c.in_disj * c.tensao_v * 0.9)
+    return `
+  <tr>
+    <td>${String(i + 1).padStart(2, '0')}</td>
+    <td class="l">${c.descricao}</td>
+    <td>${c.in_disj}A</td>
+    <td>${pot_max_va.toLocaleString('pt-BR')} VA</td>
+    <td>${c.idr ? 'Sim (30mA)' : 'Não'}</td>
+  </tr>`
+  }).join('')
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Manual do Usuário — ${projeto.empresa ? projeto.empresa + " — " : ""}${projeto.nome}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #1a1a1a;
+         background: white; padding: 2cm; line-height: 1.5; }
+  h1 { font-size: 18pt; text-align: center; color: #1B2A3B; margin-bottom: 4pt; }
+  h2 { font-size: 13pt; margin: 16pt 0 6pt; color: #1B2A3B; }
+  p  { margin: 6pt 0; text-align: justify; }
+  table { width: 100%; border-collapse: collapse; margin: 10pt 0; font-size: 10pt; }
+  th, td { border: 1px solid #ccc; padding: 6pt 8pt; }
+  th { background: #1B2A3B; color: white; text-align: center; }
+  td { text-align: center; }
+  td.l { text-align: left; }
+  .aviso { background: #fef2f2; border: 2px solid #dc2626; border-radius: 8px;
+           padding: 14pt; margin: 16pt 0; }
+  .aviso-titulo { color: #dc2626; font-weight: bold; font-size: 12pt; margin-bottom: 6pt; }
+  .dica { background: #eff6ff; border-left: 4px solid #0696d7; padding: 10pt 14pt; margin: 10pt 0; }
+  @media print { body { padding: 1.5cm; } .no-print { display: none; } }
+</style>
+</head>
+<body>
+
+<div class="no-print" style="position:fixed;top:10px;right:10px">
+  <button onclick="window.print()" style="padding:8px 16px;background:#0696d7;color:white;border:none;border-radius:6px;cursor:pointer">
+    Imprimir / Salvar PDF
+  </button>
+</div>
+
+${projeto.empresa ? `<p style="text-align:center;font-weight:700;color:#1B2A3B">${projeto.empresa}</p>` : ''}
+<h1>MANUAL DO USUÁRIO</h1>
+<p style="text-align:center;color:#666">Instalação Elétrica — ${projeto.nome}</p>
+<p style="text-align:center;font-size:9pt;color:#999">Conforme NBR 5410:2004+Em1:2008 item 6.1.8.3 · Emitido em ${data}</p>
+
+<h2>Por que este manual existe</h2>
+<p>Este documento explica, em linguagem simples, como usar com segurança o quadro de
+distribuição desta instalação. Guarde-o próximo ao quadro elétrico.</p>
+
+<div class="aviso">
+  <div class="aviso-titulo">⚠ NUNCA troque um disjuntor por um de amperagem maior</div>
+  <p>Se um disjuntor desarma (desliga sozinho) com frequência, <b>NÃO troque por um
+  de amperagem maior</b> na tentativa de "resolver". Isso remove a proteção do fio
+  contra sobreaquecimento e pode causar incêndio. O disjuntor certo para cada
+  circuito foi calculado especificamente para o fio instalado — chame um eletricista
+  ou o responsável técnico deste projeto para investigar a causa do desarme.</p>
+</div>
+
+<h2>Potência máxima recomendada por circuito</h2>
+<p>A tabela abaixo mostra, para cada circuito deste quadro, a potência máxima que
+pode ser ligada com segurança (soma de todos os aparelhos ligados ao mesmo tempo
+naquele circuito).</p>
+
+<table>
+  <tr><th>Nº</th><th>Circuito</th><th>Disjuntor</th><th>Potência máxima</th><th>Proteção DR</th></tr>
+  ${linhasCircuitos}
+</table>
+
+<div class="dica">
+  <b>Dica prática:</b> some a potência (em Watts) de todos os aparelhos que pretende
+  ligar ao mesmo tempo num circuito e compare com a coluna "Potência máxima" acima.
+  A potência de cada aparelho geralmente está numa etiqueta nele ou no manual.
+</div>
+
+<h2>Circuitos com proteção DR (30mA)</h2>
+<p>Os circuitos marcados "Sim" na tabela têm proteção contra choque elétrico (DR).
+Se esse disjuntor desarmar, pode indicar um vazamento de corrente (por exemplo,
+um chuveiro ou equipamento com defeito, ou umidade num ponto de tomada). Não é
+normal desarmar com frequência — chame um eletricista.</p>
+
+<h2>Em caso de dúvida</h2>
+<p>Qualquer alteração nesta instalação (adicionar tomadas, trocar chuveiro por um
+de maior potência, instalar ar-condicionado) deve ser avaliada por um profissional
+habilitado antes de ser feita — mudanças não previstas no projeto original podem
+sobrecarregar os circuitos existentes.</p>
+
+<p style="margin-top:24pt;font-size:9pt;color:#999;text-align:center">
+Responsável Técnico: ${projeto.projetista} — CREA ${projeto.crea}
+${projeto.empresa ? ' — ' + projeto.empresa : ''}
+</p>
+
+</body>
+</html>`
+
+  download(html, `manual_usuario_${projeto.nome.replace(/[^a-z0-9]/gi, '_')}.html`, 'text/html')
+}
