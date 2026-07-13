@@ -62,6 +62,16 @@ export function analisarSegmento(
     violacoes.push(`Ocupação ${taxa.toFixed(1)}% > 35% — NBR 5410 §6.2.11`)
   }
 
+  // §6.2.11.3 — máximo 3 curvas de 90° (270° total) entre duas caixas
+  // consecutivas. Acima disso, obrigatória caixa de passagem intermediária.
+  // Valor declarado pelo engenheiro (não detectado por geometria — ver
+  // comentário no tipo SegmentoEletroduto.n_curvas_90).
+  const n_curvas_90 = segmento.n_curvas_90 ?? 0
+  const curvas_conforme = n_curvas_90 <= 3
+  if (!curvas_conforme) {
+    violacoes.push(`${n_curvas_90} curvas de 90° (${n_curvas_90 * 90}°) > máximo 270° — NBR 5410 §6.2.11.3: insira uma caixa de passagem intermediária neste trecho`)
+  }
+
   // Fa pelo número de circuitos (NBR 5410 Tabela 42)
   const fa_map: Record<number, number> = {
     1: 1.0, 2: 0.8, 3: 0.7, 4: 0.65, 5: 0.6,
@@ -81,6 +91,8 @@ export function analisarSegmento(
     n_circuitos_distintos: n_circuitos,
     fa_resultante:         fa,
     ft_min,
+    n_curvas_90,
+    curvas_conforme,
     violacoes,
   }
 }

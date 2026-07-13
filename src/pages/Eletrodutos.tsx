@@ -155,6 +155,7 @@ export function Eletrodutos() {
     nome: '', origem: '', destino: '',
     comprimento_m: 0, diametro_mm: 20 as number,
     material: 'PVC_rigido' as SegmentoEletroduto['material'],
+    n_curvas_90: 0,
     condutores: [] as { tipo: TipoCondutor; secao: number; circ_id: string }[],
   })
 
@@ -193,9 +194,10 @@ export function Eletrodutos() {
       comprimento_m: formSeg.comprimento_m,
       diametro_mm: formSeg.diametro_mm as any,
       material: formSeg.material,
+      n_curvas_90: formSeg.n_curvas_90,
       condutores,
     })
-    setFormSeg({ nome: '', origem: '', destino: '', comprimento_m: 0, diametro_mm: 20, material: 'PVC_rigido', condutores: [] })
+    setFormSeg({ nome: '', origem: '', destino: '', comprimento_m: 0, diametro_mm: 20, material: 'PVC_rigido', n_curvas_90: 0, condutores: [] })
   }
 
   // Verificar rede
@@ -343,12 +345,28 @@ export function Eletrodutos() {
                   </select>
                 </div>
               </div>
-              <div className="fgroup">
-                <label className="flabel">Material</label>
-                <select className="fselect" value={formSeg.material}
-                  onChange={e => setFormSeg(f => ({ ...f, material: e.target.value as any }))}>
-                  {MATERIAIS_ELETRODUTO.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
+              <div className="form-grid c2">
+                <div className="fgroup">
+                  <label className="flabel">Material</label>
+                  <select className="fselect" value={formSeg.material}
+                    onChange={e => setFormSeg(f => ({ ...f, material: e.target.value as any }))}>
+                    {MATERIAIS_ELETRODUTO.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                  </select>
+                </div>
+                <div className="fgroup">
+                  <label className="flabel" title="NBR 5410 §6.2.11.3 — máx. 3 curvas (270°) entre caixas">
+                    Curvas de 90° neste trecho
+                  </label>
+                  <input className="finput" type="number" value={formSeg.n_curvas_90 || ''}
+                    onChange={e => setFormSeg(f => ({ ...f, n_curvas_90: parseInt(e.target.value) || 0 }))}
+                    min={0} max={10} step={1}
+                    style={formSeg.n_curvas_90 > 3 ? { borderColor: 'var(--red)' } : undefined} />
+                  {formSeg.n_curvas_90 > 3 && (
+                    <div style={{ fontSize: 10, color: 'var(--red)', marginTop: 2 }}>
+                      &gt;3 curvas (270°) — insira caixa de passagem intermediária
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Condutores */}
@@ -510,6 +528,13 @@ export function Eletrodutos() {
                   {analise && (
                     <span style={{ fontSize: 10, fontWeight: 700, color: statusCor }}>
                       {analise.taxa_ocupacao_pct}%
+                    </span>
+                  )}
+                  {analise && !analise.curvas_conforme && (
+                    <span title="NBR 5410 §6.2.11.3 — máx. 3 curvas (270°) entre caixas"
+                      style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--red)',
+                        background: 'rgba(220,38,38,.12)', padding: '2px 6px', borderRadius: 4 }}>
+                      ⚠ {analise.n_curvas_90} curvas &gt; 270°
                     </span>
                   )}
                   <button className="btn ghost icon" onClick={() => removeSegmento(seg.id)}

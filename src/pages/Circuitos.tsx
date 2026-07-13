@@ -10,6 +10,7 @@ import type { CircuitoPipelined } from '../core/pipeline'
 import { buildAllViewModels } from '../store/circuitViewModel'
 import type { CircuitViewModel, ViolacaoVM } from '../store/circuitViewModel'
 import { formatarTrace } from '../core/trace'
+import { SECOES_COMERCIAIS, DISJUNTORES_A } from '../data/nbr5410tables'
 
 const TIPOS = ['ILUM', 'TUG', 'TUE', 'GERAL']
 
@@ -30,6 +31,7 @@ function CircuitoCard({
 }) {
   const [showTrace, setShowTrace] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
+  const [showOverride, setShowOverride] = useState(false)
   const [novaQtd,    setNovaQtd]    = useState(1)
   const [novaPot,    setNovaPot]    = useState(100)
   const [novaDesc,   setNovaDesc]   = useState('')
@@ -370,6 +372,91 @@ function CircuitoCard({
                   {d && <div style={{ fontSize: 9.5, color: 'var(--text4)', marginTop: 2, fontFamily: 'var(--mono)' }}>{d}</div>}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Ajuste manual (override) — o cálculo automático é o piso legal;
+              a decisão final é sempre do engenheiro responsável. */}
+          {resultado && (
+            <div style={{
+              marginBottom: 10, border: '1px solid var(--border)', borderRadius: 4,
+              background: raw.override_secao_mm2 || raw.override_in_disj || raw.override_curva
+                ? 'rgba(217,119,6,.08)' : 'var(--surface2)',
+              overflow: 'hidden',
+            }}>
+              <div
+                style={{ padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}
+                onClick={() => setShowOverride(!showOverride)}
+              >
+                <span style={{ fontSize: 9, color: 'var(--text4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                  AJUSTE MANUAL
+                </span>
+                {(raw.override_secao_mm2 || raw.override_in_disj || raw.override_curva) ? (
+                  <span style={{ flex: 1, fontSize: 10.5, color: 'var(--amber)', fontWeight: 600 }}>
+                    ⚙ override ativo — {raw.override_motivo || 'sem justificativa registrada'}
+                  </span>
+                ) : (
+                  <span style={{ flex: 1, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic' }}>
+                    cálculo automático — clique para sobrepor manualmente
+                  </span>
+                )}
+                <span style={{ fontSize: 10, color: 'var(--blue)', flexShrink: 0 }}>
+                  {showOverride ? '▲' : '▼ ajustar'}
+                </span>
+              </div>
+
+              {showOverride && (
+                <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border)' }}>
+                  <div className="form-grid c3">
+                    <div className="fgroup" style={{ margin: 0 }}>
+                      <label className="flabel" style={{ fontSize: 9 }}>Seção (mm²)</label>
+                      <select className="fselect" style={{ height: 28, fontSize: 11 }}
+                        value={raw.override_secao_mm2 ?? ''}
+                        onChange={e => onUpdate(raw.id, 'override_secao_mm2', e.target.value ? Number(e.target.value) : undefined)}>
+                        <option value="">— automático —</option>
+                        {SECOES_COMERCIAIS.map(s => <option key={s} value={s}>{s}mm²</option>)}
+                      </select>
+                    </div>
+                    <div className="fgroup" style={{ margin: 0 }}>
+                      <label className="flabel" style={{ fontSize: 9 }}>Disjuntor (A)</label>
+                      <select className="fselect" style={{ height: 28, fontSize: 11 }}
+                        value={raw.override_in_disj ?? ''}
+                        onChange={e => onUpdate(raw.id, 'override_in_disj', e.target.value ? Number(e.target.value) : undefined)}>
+                        <option value="">— automático —</option>
+                        {DISJUNTORES_A.map(a => <option key={a} value={a}>{a}A</option>)}
+                      </select>
+                    </div>
+                    <div className="fgroup" style={{ margin: 0 }}>
+                      <label className="flabel" style={{ fontSize: 9 }}>Curva</label>
+                      <select className="fselect" style={{ height: 28, fontSize: 11 }}
+                        value={raw.override_curva ?? ''}
+                        onChange={e => onUpdate(raw.id, 'override_curva', e.target.value || undefined)}>
+                        <option value="">— automático —</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                      </select>
+                    </div>
+                  </div>
+                  {(raw.override_secao_mm2 || raw.override_in_disj || raw.override_curva) && (
+                    <div className="fgroup" style={{ marginTop: 6 }}>
+                      <label className="flabel" style={{ fontSize: 9 }}>
+                        Justificativa técnica (obrigatória para memorial)
+                      </label>
+                      <input className="finput" style={{ height: 28, fontSize: 11 }}
+                        value={raw.override_motivo ?? ''}
+                        placeholder="Ex: reserva técnica para expansão futura conforme solicitação do cliente"
+                        onChange={e => onUpdate(raw.id, 'override_motivo', e.target.value)} />
+                    </div>
+                  )}
+                  <div style={{ fontSize: 9, color: 'var(--text4)', marginTop: 6, lineHeight: 1.4 }}>
+                    O valor calculado automaticamente é o piso normativo (NBR 5410) — nunca fica
+                    abaixo dele por segurança. O ajuste manual permite subir a bitola/proteção por
+                    decisão de projeto (ex: reserva de expansão), mas não substitui a responsabilidade
+                    técnica do engenheiro por essa escolha.
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

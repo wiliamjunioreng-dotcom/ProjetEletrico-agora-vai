@@ -511,6 +511,17 @@ distribuição desta instalação. Guarde-o próximo ao quadro elétrico.</p>
   ou o responsável técnico deste projeto para investigar a causa do desarme.</p>
 </div>
 
+<div class="aviso">
+  <div class="aviso-titulo">⚠ NUNCA desative ou remova o dispositivo DR (disjuntor diferencial)</div>
+  <p>O DR (identificado por um botão de teste "T" no próprio disjuntor) protege contra
+  choques elétricos. Se ele desarmar, <b>NÃO o substitua por um disjuntor comum</b> nem
+  o desligue permanentemente para "parar de incomodar". Um DR que desarma com frequência
+  geralmente indica um vazamento de corrente real — um equipamento com defeito, um ponto
+  de umidade, ou uma instalação que precisa de reparo. Desativar essa proteção elimina a
+  defesa contra choque elétrico e representa risco de vida. Chame um eletricista para
+  identificar a causa.</p>
+</div>
+
 <h2>Potência máxima recomendada por circuito</h2>
 <p>A tabela abaixo mostra, para cada circuito deste quadro, a potência máxima que
 pode ser ligada com segurança (soma de todos os aparelhos ligados ao mesmo tempo

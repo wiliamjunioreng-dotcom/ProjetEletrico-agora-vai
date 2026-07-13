@@ -414,6 +414,14 @@ export interface SegmentoEletroduto {
   comprimento_m:   number
   diametro_mm:     16|20|25|32|40|50|63|75
   material:        'PVC_rigido'|'PVC_flex'|'Aco_EMT'|'Aco_IMC'
+  // Curvas de 90° declaradas pelo engenheiro neste trecho — NBR 5410
+  // §6.2.11.3 limita a 3 curvas de 90° (270° total) entre duas caixas
+  // consecutivas; acima disso é obrigatória uma caixa de passagem
+  // intermediária. O sistema NÃO detecta isso automaticamente a partir
+  // de geometria (o traçado não é rastreado curva a curva) — o
+  // engenheiro declara quantas curvas de 90° existem fisicamente no
+  // trecho, e o sistema valida contra o limite.
+  n_curvas_90?:    number
   // Condutores presentes neste segmento específico
   condutores:      ConductorEmSegmento[]
   // Calculado
@@ -431,6 +439,9 @@ export interface AnaliseSegmento {
   fa_resultante:         number
   // Correção térmica resultante
   ft_min:                number   // menor Ft dos condutores
+  // Curvas — NBR 5410 §6.2.11.3 (máx. 3 curvas de 90° / 270° entre caixas)
+  n_curvas_90:            number
+  curvas_conforme:        boolean
   // Verificações
   violacoes:             string[]
 }
