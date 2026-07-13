@@ -262,7 +262,7 @@ export function solve(dominio: DominioDeclarativo): EstadoCalculado {
       tipo: c.tipo, descricao: c.descricao, id: c.id,
     })) as any[]
 
-    const d = calcularDemanda(ciParaDemanda, projeto.v_fase, projeto.fp_global)
+    const d = calcularDemanda(ciParaDemanda, projeto.v_fase, projeto.fp_global, projeto.sistema as any)
     const violacoes_qd = reservasQD(d.n_ativos, d.n_reservas)
 
     demanda = {

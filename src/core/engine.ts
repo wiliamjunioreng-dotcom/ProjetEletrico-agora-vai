@@ -1,4 +1,4 @@
-import { inferirCurva } from './protectionDevicePhysics'
+import { inferirCurva, FATOR_K } from './protectionDevicePhysics'
 // Regras NBR validadas via pipeline.ts → core/rules/index.ts (validarCircuito)
 // src/core/engine.ts
 // Motor de cálculo elétrico — física pura + auditoria normativa
@@ -616,6 +616,7 @@ export interface IccInput {
   secao_mm2: number        // seção do condutor (mm²)
   comprimento_m: number    // comprimento do circuito (m)
   material: 'Cu' | 'Al'
+  isolacao?: 'PVC' | 'XLPE' | 'EPR'  // padrão PVC — determina o fator K correto
   temperatura: number      // temperatura de operação (°C)
 }
 
@@ -634,7 +635,7 @@ export interface IccResult {
 }
 
 export function calcIcc(input: IccInput, in_disj_a: number): IccResult {
-  const { icc_rede_ka, v_linha, secao_mm2, comprimento_m, material, temperatura } = input
+  const { icc_rede_ka, v_linha, secao_mm2, comprimento_m, material, temperatura, isolacao } = input
 
   // Resistividade corrigida pela temperatura
   const rho_20  = material === 'Cu' ? 0.0172 : 0.0282  // Ω·mm²/m
@@ -674,8 +675,17 @@ export function calcIcc(input: IccInput, in_disj_a: number): IccResult {
                          : 300              // zona térmica
 
   // Energia específica para verificar integridade do cabo
-  // Máxima admissível (IEC 60364-5-54): k²×S² onde k=143 (Cu PVC)
-  const k = material === 'Cu' ? 143 : 95
+  // Máxima admissível (IEC 60364-5-54 / NBR 5410 Tabela B.1): k²×S²
+  // BUG CORRIGIDO: usava k=143 fixo para todo cobre, mas 143 é o valor
+  // de Cu/XLPE — para Cu/PVC (isolação padrão/mais comum do projeto)
+  // o valor correto é 115. Usar 143 indevidamente superestimava a
+  // capacidade térmica do cabo em ~54% ((143/115)²≈1,55), tornando a
+  // verificação de curto-circuito mais permissiva do que deveria no
+  // caso comum. Agora usa a mesma tabela única de protectionDevicePhysics.ts
+  // (Cu/PVC=115, Cu/XLPE=143, Al/PVC=74, Al/XLPE=94), evitando uma
+  // terceira cópia divergente do mesmo dado normativo.
+  const isolacaoChave = (isolacao === 'XLPE' || isolacao === 'EPR') ? 'XLPE' : 'PVC'
+  const k = FATOR_K[`${material}/${isolacaoChave}`] ?? (material === 'Cu' ? 115 : 74)
   const energia_max = (k * secao_mm2) ** 2
   const energia_especifica = (icc_min_a ** 2) * (tempo_atuacao_ms / 1000)
   const energia_relativa = energia_max > 0 ? energia_especifica / energia_max : 0

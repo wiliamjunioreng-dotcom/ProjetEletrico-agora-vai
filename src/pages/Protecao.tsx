@@ -32,6 +32,7 @@ export function Protecao() {
       secao_mm2:     c.secao_fase,
       comprimento_m: r.comprimento_m,
       material:      (projeto as any).material_cabo || 'Cu',
+      isolacao:      (projeto as any).isolacao || 'PVC',
       temperatura:   (projeto as any).t_amb || 30,
     }, c.in_disj)
   })

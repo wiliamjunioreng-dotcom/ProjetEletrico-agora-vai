@@ -6,20 +6,17 @@ import type { CircuitoContext } from './context'
 
 const N9 = 'NBR 5410:2004'
 
-// §9.5.2.1 — Mínimo de iluminação (100VA/ponto)
-export function iluminacaoMinima(area_m2: number, ilum_va: number): ResultadoNorma[] {
-  const norma      = `${N9} §9.5.2.1 — 100VA por ponto de iluminação`
-  const n_min      = area_m2 <= 6 ? 1 : Math.ceil(area_m2 / 6)
-  const va_min     = n_min * 100
-  if (ilum_va < va_min) {
-    return [R.aviso(
-      'NBR5410.9.5.2.1',
-      `ILUM ${ilum_va}VA < mínimo ${va_min}VA para ${area_m2}m² (${n_min} ponto(s) × 100VA)`,
-      norma, ilum_va, va_min
-    )]
-  }
-  return []
-}
+// §9.5.2.1 — REMOVIDA (não wire sem antes conferir):
+// Esta função existia aqui com uma fórmula própria (ceil(área/6)×100VA)
+// que DIVERGE da fórmula correta já verificada contra o texto da norma
+// e implementada em engine.ts→calcIlumComodo() (100 + floor((área-6)/4)×60).
+// Exemplo da divergência: para 16m², esta função dava 300VA; a fórmula
+// correta dá 220VA. Nunca foi chamada por validarCircuito() nem por
+// nenhuma página — ficou órfã. Removida em vez de conectada para não
+// introduzir uma violação normativa INCORRETA na tela do engenheiro.
+// Se uma verificação de ILUM mínima por circuito fizer falta no futuro,
+// implementar reaproveitando calcIlumComodo() como fonte de verdade,
+// não recriando a fórmula aqui.
 
 // §9.5.2.2 — TUG 2,5mm²: Ib > 10A → sugerir desmembramento
 export function tugCorrente(ctx: CircuitoContext): ResultadoNorma[] {

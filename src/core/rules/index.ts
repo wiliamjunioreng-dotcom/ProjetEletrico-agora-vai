@@ -11,7 +11,7 @@ export { R, statusGeral } from './context'
 
 export { tripartida, sobrecarga, idrAreaMolhada } from './protection'
 export { secaoMinima, quedaTensao, ocupacaoEletroduto, reservasQD, SECAO_MIN } from './sizing'
-export { iluminacaoMinima, tugCorrente, misturaIlumTug } from './terminals'
+export { tugCorrente, misturaIlumTug } from './terminals'
 
 // ── Aplicar todas as regras de circuito de uma vez ────────────────
 import { tripartida, sobrecarga, idrAreaMolhada } from './protection'
