@@ -443,15 +443,48 @@ export function calcularDemanda(
 export function calcIlumComodo(area_m2: number): number {
   if (area_m2 <= 0) return 0
   if (area_m2 <= 6) return 100
-  return 100 + Math.ceil((area_m2 - 6) / 4) * 60
+  // §9.5.2.1.2: 100 VA para os primeiros 6 m², acrescidos de 60 VA
+  // para cada aumento de 4 m² INTEIROS — logo floor, não ceil.
+  // BUG CORRIGIDO: ceil superdimensionava até 60 VA por cômodo
+  // (ex.: 16 m² → norma 220 VA; antes o código dava 280 VA).
+  return 100 + Math.floor((area_m2 - 6) / 4) * 60
 }
 
-// ── Calcular TUG por cômodo — NBR 5410 item 9.5.2.2 ────────────
-export function calcTugComodo(perimetro_m: number, tipo: string): number {
-  if (perimetro_m <= 0) return 0
+// ── Calcular TUG por cômodo — NBR 5410 §9.5.2.2 ─────────────────
+// Tipos com regra própria (quantidade E potência):
+//   Banheiro:                mín. 1 tomada (junto ao lavatório) — 600 VA
+//   Cozinha/Copa/Lavanderia/
+//   Área de serviço:         1 tomada a cada 3,5 m OU FRAÇÃO de
+//                            perímetro; potência 600 VA nas 3
+//                            primeiras + 100 VA nas excedentes
+//   Varanda/Externo:         mín. 1 tomada — 100 VA
+//   Demais (salas/dorms):    área ≤ 6 m² → 1 tomada; senão 1 a cada
+//                            5 m ou fração de perímetro — 100 VA
+// BUG CORRIGIDO: a versão anterior usava 1/5 m e potência fixa por
+// tipo para TODOS os ambientes — cozinhas/AS ficavam com MENOS
+// tomadas que o mínimo da norma (violação real, não conservadora).
+export function calcTugComodo(perimetro_m: number, tipo: string, area_m2 = 0): number {
+  if (perimetro_m <= 0 && area_m2 <= 0) return 0
+
+  if (tipo === 'Banho') {
+    return 600  // mínimo normativo: 1 tomada de 600 VA
+  }
+
+  if (tipo === 'Cozinha' || tipo === 'Lavanderia') {
+    const n = Math.max(1, Math.ceil(perimetro_m / 3.5))
+    const n600 = Math.min(n, 3)
+    return n600 * 600 + (n - n600) * 100
+  }
+
+  if (tipo === 'Externo') {
+    const n = Math.max(1, Math.ceil(perimetro_m / 5))
+    return n * 100
+  }
+
+  // Demais dependências (Social, Garagem, ...):
+  if (area_m2 > 0 && area_m2 <= 6) return 100  // 1 tomada
   const n = Math.max(1, Math.ceil(perimetro_m / 5))
-  const pot = POT_TOMADA[tipo] ?? 100
-  return n * pot
+  return n * (POT_TOMADA[tipo] ?? 100)
 }
 
 // ── Luminotécnico — Método dos Lúmens NBR ISO/CIE 8995-1 ────────

@@ -279,7 +279,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Se o input já traz ilum_va/tug_va (modo manual, LED real, etc.), usar eles
     const inputAny = input as any
     const ilum_nbr = calcIlumComodo(input.area_m2)
-    const tug_nbr  = calcTugComodo(input.perimetro_m, input.tipo)
+    const tug_nbr  = calcTugComodo(input.perimetro_m, input.tipo, input.area_m2)
     const comodo: Comodo = {
       ...input,
       id:      crypto.randomUUID(),
@@ -329,7 +329,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         if (c.id !== id) return c
         const u = { ...c, ...partial }
         u.ilum_va = calcIlumComodo(u.area_m2)
-        u.tug_va  = calcTugComodo(u.perimetro_m, u.tipo)
+        u.tug_va  = calcTugComodo(u.perimetro_m, u.tipo, u.area_m2)
         return u
       }),
       modificado: true,

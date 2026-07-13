@@ -298,7 +298,7 @@ export function Comodos() {
 
   // Mínimos NBR
   const ilumNBR = area  > 0 ? calcIlumComodo(area)            : 0
-  const tugNBR  = perim > 0 ? calcTugComodo(perim, form.tipo) : 0
+  const tugNBR  = (perim > 0 || area > 0) ? calcTugComodo(perim, form.tipo, area) : 0
 
   // Calcular potências de iluminação
   const potRealLamps_w = lampadas.reduce((s, l) => s + l.qtd * l.pot_w, 0)
@@ -941,7 +941,7 @@ export function Comodos() {
           const lumino  = (c as any).lumino
           const potReal = lumino ? Math.round((lumino.n_luminarias || 1) * lumino.luminaria_pot_w) : 0
           const ilumNBRc = calcIlumComodo(c.area_m2)
-          const tugNBRc  = calcTugComodo(c.perimetro_m, c.tipo)
+          const tugNBRc  = calcTugComodo(c.perimetro_m, c.tipo, c.area_m2)
           const abaixoIlum = c.ilum_va < ilumNBRc
           const abaixoTug  = c.tug_va  < tugNBRc
           const violacoesNBR9 = verificarComodoNBR9(c).filter(v => !v.conforme)

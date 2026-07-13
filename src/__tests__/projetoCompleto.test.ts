@@ -9,7 +9,10 @@ const CFG = { v_fase: 127, metodo: 'B1', isolacao: 'PVC' as const, material: 'Cu
               t_amb: 30, du_max: 4, du_ramal: 0.5 }
 
 describe('PROJETO COMPLETO — Residência térrea 70m²', () => {
-  it('§9.5.2.1 ILUM sala 16m² → 280VA', () => expect(calcIlumComodo(16)).toBe(280))
+  it('§9.5.2.1 ILUM sala 16m² → 100+floor(10/4)×60 = 220VA (aumentos de 4m² INTEIROS)', () =>
+    expect(calcIlumComodo(16)).toBe(220))
+  it('§9.5.2.1 ILUM 10m² → 1 aumento inteiro → 160VA', () =>
+    expect(calcIlumComodo(10)).toBe(160))
   it('§9.5.2.1 ILUM banheiro 4m² → 100VA', () => expect(calcIlumComodo(4)).toBe(100))
 
   const circuitos: { input: CircuitInput; verifica: (r: CircuitResult) => void }[] = [

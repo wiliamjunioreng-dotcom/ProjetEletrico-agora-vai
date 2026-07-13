@@ -71,7 +71,11 @@ Responda APENAS com JSON válido, sem markdown, sem crases, neste formato:
   if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`)
   const data = await resp.json()
   const texto = (data.content ?? []).map((b: any) => b.text ?? '').join('')
-  const limpo = texto.replace(/```json|```/g, '').trim()
+  let limpo = texto.replace(/```json|```/g, '').trim()
+  // Robustez: se a IA incluir texto antes/depois do JSON (caso mais
+  // comum de falha), extrai apenas o primeiro objeto { ... } completo.
+  const ini = limpo.indexOf('{'), fim = limpo.lastIndexOf('}')
+  if (ini >= 0 && fim > ini) limpo = limpo.slice(ini, fim + 1)
   const parsed = JSON.parse(limpo)
   return (parsed.ambientes ?? []).map((a: any, i: number) => ({
     id: crypto.randomUUID(),
