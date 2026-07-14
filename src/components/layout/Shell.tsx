@@ -5,8 +5,6 @@ import { useProjectStore } from '../../store/projectStore'
 
 const NAV = [
   { group: 'Configuração' },
-  { id: 'levantamento', label: '✨ Levantamento IA', step: '0', icon: 'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z' },
-  { id: 'importar_dxf', label: '📐 Importar DXF', step: '0', icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
   { id: 'projeto',       label: 'Dados do Projeto',   step: '1', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
   { id: 'comodos',       label: 'Previsão de Cargas', step: '2', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
   { group: 'Cálculo' },
@@ -20,10 +18,9 @@ const NAV = [
   { id: 'materiais',    label: 'Lista de Materiais',   step: '',  icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
   { id: 'precos',       label: 'Preços SINAPI/SETOP',   step: '',  icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
   { id: 'art',          label: 'Relatório / ART',     step: '',  icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-  { id: 'planta',        label: 'Planta Baixa Elétrica', step: '',
-    icon: 'M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7' },
-  { id: 'eletrodutos',  label: 'Eletrodutos / NBR 5444', step: '', icon: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18' },
+  { id: 'eletrodutos',  label: 'Eletrodutos', step: '', icon: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18' },
   { id: 'luminotecnico', label: 'Luminotécnico',          step: '',  icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
+  { id: 'simbologia',   label: '📖 Legenda NBR 5444', step: '', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s4.332.477 5.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
 ]
 
 const PASSOS_TOTAL = 6
@@ -76,8 +73,8 @@ export function Shell({ children }: { children: ReactNode }) {
   // Calcular passo atual para progress bar
   const STEP_MAP: Record<string, number> = {
     dashboard: 0, projeto: 1, comodos: 2, circuitos: 3,
-    levantamento: 0, importar_dxf: 0, balanceamento: 4, protecao: 5, auditoria: 5, qdfl: 6, unifilar: 6, materiais: 6,
-    luminotecnico: 2, eletrodutos: 3, planta: 3, precos: 6, art: 6
+    balanceamento: 4, protecao: 5, auditoria: 5, qdfl: 6, unifilar: 6, materiais: 6,
+    luminotecnico: 2, eletrodutos: 3, precos: 6, art: 6, simbologia: 0,
   }
   const passo_atual = STEP_MAP[pagina_atual] ?? 0
   const progress_pct = Math.round((passo_atual / PASSOS_TOTAL) * 100)

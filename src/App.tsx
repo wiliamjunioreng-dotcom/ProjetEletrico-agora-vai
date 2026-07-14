@@ -9,15 +9,13 @@ import { Balanceamento }  from './pages/Balanceamento'
 import { Protecao }       from './pages/Protecao'
 import { QDFL }           from './pages/QDFL'
 import Auditoria          from './pages/Auditoria'
-import ImportarDXF        from './pages/ImportarDXF'
-import LevantamentoIA     from './pages/LevantamentoIA'
 import { Unifilar }       from './pages/Unifilar'
 import { Materiais }      from './pages/Materiais'
 import { Luminotecnico }  from './pages/Luminotecnico'
 import { ART }           from './pages/ART'
 import { Eletrodutos } from './pages/Eletrodutos'
-import { PlantaBaixa } from './pages/PlantaBaixa'
 import { Precos }        from './pages/Precos'
+import { SimbologiaNBR5444 } from './pages/SimbologiaNBR5444'
 
 const PAGES: Record<string, React.ComponentType> = {
   dashboard:     Dashboard,
@@ -27,8 +25,6 @@ const PAGES: Record<string, React.ComponentType> = {
   balanceamento: Balanceamento,
   protecao:      Protecao,
   auditoria:     Auditoria,
-  importar_dxf:  ImportarDXF,
-  levantamento:  LevantamentoIA,
   qdfl:          QDFL,
   unifilar:      Unifilar,
   materiais:     Materiais,
@@ -36,7 +32,7 @@ const PAGES: Record<string, React.ComponentType> = {
   art:           ART,
   precos:        Precos,
   eletrodutos:   Eletrodutos,
-  planta:        PlantaBaixa,
+  simbologia:    SimbologiaNBR5444,
 }
 
 export default function App() {

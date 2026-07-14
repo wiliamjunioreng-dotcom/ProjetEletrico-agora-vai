@@ -7,7 +7,6 @@ import type {
   TipoNo, TipoCondutor,
 } from '../types/electrical'
 import { validarRede, MODELOS_COMANDO } from '../core/topologia'
-import { EletrodutosCanvas } from './EletrodutosCanvas'
 import { getDiametroExterno, AREA_INTERNA_ELETRODUTO } from '../data/nbr5410tables'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -198,9 +197,8 @@ function PainelSegmento({ seg, circuitos, onUpdate, onRemove, onFechar }: {
 
 // ── Componente principal ───────────────────────────────────────────
 export function Eletrodutos() {
-  const { rede, addNo, addSegmento, removeNo, removeSegmento, updateNo, updateSegmento, circuitos } = useProjectStore()
+  const { rede, addNo, addSegmento, removeNo, removeSegmento, updateSegmento, circuitos } = useProjectStore()
   const [segSelecionadoId, setSegSelecionadoId] = useState<string | null>(null)
-  const [noSelecionadoId, setNoSelecionadoId] = useState<string | null>(null)
 
   const nos = rede?.nos ?? []
   const segmentos = rede?.segmentos ?? []
@@ -244,25 +242,6 @@ export function Eletrodutos() {
   // comprimento = distância real entre os nós posicionados). O
   // engenheiro refina depois clicando na linha (condutores, diâmetro
   // exato, material) — não precisa preencher tudo antes de desenhar.
-  function adicionarSegmentoRapido(origemId: string, destinoId: string) {
-    const origem = nos.find(n => n.id === origemId)
-    const destino = nos.find(n => n.id === destinoId)
-    const dx = (destino?.pos_x ?? 0) - (origem?.pos_x ?? 0)
-    const dy = (destino?.pos_y ?? 0) - (origem?.pos_y ?? 0)
-    const distancia = Math.max(1, Math.round(Math.sqrt(dx * dx + dy * dy) * 10) / 10)
-    const novoId = addSegmento({
-      nome: `${origem?.nome ?? '?'} → ${destino?.nome ?? '?'}`,
-      origem_no_id: origemId,
-      destino_no_id: destinoId,
-      comprimento_m: distancia,
-      diametro_mm: 20,
-      material: 'PVC_rigido',
-      n_curvas_90: 0,
-      condutores: [],
-    } as any)
-    return novoId
-  }
-
   function adicionarSegmento() {
     if (!formSeg.nome.trim() || !formSeg.origem || !formSeg.destino) return
     const condutores = formSeg.condutores.map(c => ({
@@ -339,34 +318,56 @@ export function Eletrodutos() {
     <div className="page-scroll">
     <div className="page-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-      {/* Canvas interativo — a linha É o eletroduto, os condutores que
-          passam por ela são representados por simbologia (bolinhas
-          coloridas ao longo da linha, mesma cor da legenda de fios).
-          Desenhar um trecho: clique em "Desenhar eletroduto", clique no
-          nó de origem, clique no nó de destino. Arraste nós livremente
-          no modo padrão para organizar o layout como preferir. */}
-      <div style={{ display: 'grid', gridTemplateColumns: segSelecionadoId ? 'minmax(0,1fr) 320px' : '1fr', gap: 12, alignItems: 'start' }}>
-        <div className="card">
-          <div className="card-header">
-            Canvas — desenhe o eletroduto, veja a fiação
+      {/* Representação da fiação — NÃO é desenho. O programa nunca traça
+          o percurso físico do eletroduto (isso é trabalho do CAD); aqui
+          só declaramos QUAIS trechos existem e QUAIS fios passam em cada
+          um, e o programa mostra isso por símbolo/cor — fase, neutro,
+          terra, retorno, de qual circuito, qual bitola. */}
+      <div style={{ display: 'grid', gridTemplateColumns: segSelecionadoId ? 'minmax(0,1fr) 320px' : 'repeat(auto-fill, minmax(280px,1fr))', gap: 12, alignItems: 'start' }}>
+        {segmentos.length === 0 ? (
+          <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text4)', fontSize: 11 }}>
+            Nenhum trecho declarado ainda — use o formulário abaixo para criar o primeiro.
           </div>
-          <div style={{ padding: 12 }}>
-            {nos.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text4)', fontSize: 11 }}>
-                Adicione nós (QD, caixas, pontos) no formulário abaixo para começar a desenhar.
+        ) : segmentos.map(seg => {
+          const status = seg.analise?.status_ocupacao
+          const corStatus = status === 'EXCEDIDO' ? 'var(--red)' : status === 'LIMITE' ? 'var(--amber)' : 'var(--green)'
+          const origem = nos.find(n => n.id === seg.origem_no_id)
+          const destino = nos.find(n => n.id === seg.destino_no_id)
+          return (
+            <div key={seg.id} className="eletroduto-trecho"
+              style={{ cursor: 'pointer', borderColor: seg.id === segSelecionadoId ? 'var(--gold-mid)' : undefined }}
+              onClick={() => setSegSelecionadoId(seg.id === segSelecionadoId ? null : seg.id)}>
+              <div className="header">
+                <span style={{ flex: 1 }}>{seg.nome}</span>
+                {seg.analise && (
+                  <span style={{ fontSize: 10, fontWeight: 700, color: corStatus, fontFamily: 'var(--mono)' }}>
+                    {seg.analise.taxa_ocupacao_pct}%
+                  </span>
+                )}
               </div>
-            ) : (
-              <EletrodutosCanvas
-                nos={nos} segmentos={segmentos}
-                onUpdateNo={updateNo}
-                onAddSegmento={adicionarSegmentoRapido}
-                onSelectSegmento={setSegSelecionadoId}
-                onSelectNo={setNoSelecionadoId}
-                segmentoSelecionadoId={segSelecionadoId}
-              />
-            )}
-          </div>
-        </div>
+              <div style={{ padding: '8px 14px 0', fontSize: 10, color: 'var(--text4)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <span>{origem?.nome ?? '?'} → {destino?.nome ?? '?'}</span>
+                <span>⌀{seg.diametro_mm}mm</span>
+                <span>{seg.comprimento_m}m</span>
+              </div>
+              <div className="condutores">
+                {seg.condutores.length === 0 ? (
+                  <span style={{ fontSize: 10, color: 'var(--text4)', fontStyle: 'italic' }}>sem condutores declarados</span>
+                ) : seg.condutores.map((cd, i) => {
+                  const classeCor = cd.tipo.startsWith('FASE') ? 'fase'
+                    : cd.tipo === 'NEUTRO' ? 'neutro'
+                    : cd.tipo === 'PE' ? 'pe' : 'retorno'
+                  const circ = circuitos.find(ci => ci.id === cd.circuito_id)
+                  return (
+                    <span key={i} className={`fio-badge ${classeCor}`}>
+                      {cd.tipo} {cd.secao_mm2}mm²{circ ? ` · C${String(circ.numero).padStart(2,'0')}` : ''}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
         {segSelecionadoId && (() => {
           const seg = segmentos.find(s => s.id === segSelecionadoId)
           if (!seg) return null
@@ -382,21 +383,8 @@ export function Eletrodutos() {
         })()}
       </div>
 
-      {noSelecionadoId && !segSelecionadoId && (() => {
-        const no = nos.find(n => n.id === noSelecionadoId)
-        if (!no) return null
-        return (
-          <div style={{ fontSize: 11, color: 'var(--text3)', padding: '6px 10px',
-            background: 'var(--gold-dim)', borderRadius: 8, display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-            <b>{no.nome}</b> · {TIPO_NO_LABEL[no.tipo]}
-            <button className="btn ghost icon" style={{ height: 22 }}
-              onClick={() => { removeNo(no.id); setNoSelecionadoId(null) }}>🗑 remover nó</button>
-          </div>
-        )
-      })()}
-
       <div style={{ fontSize: 10.5, color: 'var(--text4)', padding: '0 2px' }}>
-        ⌄ Formulário detalhado abaixo — útil para lançamento em massa ou ajuste fino
+        Clique num card pra editar · use o formulário abaixo pra declarar um novo trecho
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,280px) minmax(0,1fr)', gap: 12, alignItems: 'start' }}>
