@@ -173,6 +173,18 @@ export interface Comodo {
   // mínimo 2 circuitos terminais de ILUM em ambientes >100m².
   afluencia_publico?: boolean
 
+  // Grupo de agrupamento de circuito ILUM — DECLARADO pelo engenheiro,
+  // não detectado por geometria. O sistema não tem acesso à posição
+  // espacial dos cômodos no domínio elétrico (isso vive só no domínio
+  // geométrico da PlantaBaixa, separado por design) — então não pode
+  // saber sozinho quais cômodos são fisicamente próximos.
+  // O engenheiro, olhando a própria planta, atribui o MESMO texto de
+  // grupo a cômodos que quer no mesmo circuito de ILUM por economia de
+  // cabo (ex: "Ala Quartos", "Fundo da Casa"). Cômodos sem grupo caem
+  // no agrupamento automático padrão (por ordem de criação + limite
+  // de 3 cômodos/800VA) — comportamento anterior preservado.
+  grupo_circuito_ilum?: string
+
   // Luminotécnico (opcional)
   lumino?: LuminoData
 }

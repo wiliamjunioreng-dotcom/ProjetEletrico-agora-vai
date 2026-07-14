@@ -159,6 +159,7 @@ interface Form {
   area:      string
   perim:     string
   afluencia_publico: boolean
+  grupo_circuito_ilum: string
   // Iluminação
   ilum_modo: 'auto' | 'manual' | 'lampadas' | 'string'
   ilum_manual: string
@@ -173,7 +174,7 @@ interface Form {
 }
 
 const EMPTY: Form = {
-  nome: '', tipo: 'Social', area: '', perim: '', afluencia_publico: false,
+  nome: '', tipo: 'Social', area: '', perim: '', afluencia_publico: false, grupo_circuito_ilum: '',
   ilum_modo: 'auto', ilum_manual: '', ilum_string: '',
   tug_modo:  'auto', tug_manual: '',
   tue_d: '', tue_v: '', tue_fase: 'mono' as const, tue_tipo: 'geral' as const,
@@ -431,6 +432,7 @@ export function Comodos() {
       perimetro_m:  perim,
       pe_direito_m: 2.8,
       afluencia_publico: form.afluencia_publico,
+      grupo_circuito_ilum: form.grupo_circuito_ilum.trim() || undefined,
       tues,
       // Passar os valores calculados explicitamente — o store vai respeitá-los
       ilum_va:      ilumEfetiva,
@@ -588,6 +590,20 @@ export function Comodos() {
               onChange={e => setForm(f => ({ ...f, afluencia_publico: e.target.checked }))} />
             Local de afluência de público (loja, escola, igreja...) — NBR 13570
           </label>
+
+          <div className="fgroup" style={{ marginTop: 6 }}>
+            <label className="flabel" title="Cômodos fisicamente próximos economizam cabo se compartilharem o mesmo circuito de iluminação — mas o sistema não enxerga a planta, só você. Dê o MESMO nome de grupo a cômodos que você sabe estarem próximos (ex: 'Ala Quartos', 'Fundo da Casa') e eles serão agrupados juntos, respeitando o limite de 3 cômodos/800VA por circuito.">
+              Grupo de circuito ILUM (opcional)
+            </label>
+            <input className="finput" value={form.grupo_circuito_ilum}
+              onChange={e => setForm(f => ({ ...f, grupo_circuito_ilum: e.target.value }))}
+              placeholder="ex: Ala Quartos — deixe vazio para agrupamento automático" />
+            <div className="fhint">
+              Cômodos com o mesmo texto aqui ficam no mesmo circuito de ILUM. Sem
+              preenchimento, o sistema agrupa automaticamente por ordem de criação
+              (não pela planta — o sistema não sabe quais cômodos são vizinhos).
+            </div>
+          </div>
 
           {/* ── ILUMINAÇÃO ────────────────────────────────────── */}
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>

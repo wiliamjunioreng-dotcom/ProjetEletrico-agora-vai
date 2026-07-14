@@ -388,51 +388,76 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Cômodos sem cargas manuais → usar lógica NBR automática abaixo
     const comodos_auto = comodos.filter(c => !c.cargas_manuais?.length)
 
-    // ILUM — agrupar até 3 ou 800VA
+    // ILUM — agrupar até 3 cômodos ou 800VA por circuito
     // potencia_real_w = soma da pot. real das lâmpadas (LED real)
     // potencia_va     = pot. de dimensionamento (cabo/disjuntor)
-    let grp: string[] = [], grpVA = 0, grpRealW = 0, grpId = '', grpComodos: string[] = []
-    comodos_auto.filter(c => c.ilum_va > 0).forEach(c => {
-      const lumino = (c as any).lumino
-      const realW  = lumino ? Math.round((lumino.n_luminarias || 1) * lumino.luminaria_pot_w) : 0
-
-      if (grp.length >= 3 || grpVA + c.ilum_va > 800) {
-        if (grp.length > 0) {
-          // Coletar lampadas dos cômodos deste grupo para composição analítica
-          const lampGrupo = grpComodos.flatMap((cid: string) => {
-            const com = comodos.find(x => x.id === cid)
-            const lamps = (com as any)?.lampadas ?? []
-            return lamps
-          })
-          circs.push({
-            id: crypto.randomUUID(), descricao: `ILUM: ${grp.join(', ')}`,
-            potencia_va:     grpVA,
-            potencia_real_w: grpRealW > 0 ? grpRealW : undefined,
-            lampadas:        lampGrupo.length > 0 ? lampGrupo : undefined,
-            minimo_nbr_va:   grpVA,
-            abaixo_minimo_nbr: false,
-            fase: fases[fi++ % 3],
-            comprimento_m: comprimentoEstimado(comodos.find(x => x.id === grpId)?.tipo ?? 'Sala', 'ILUM'),
-            n_agrup: 1, tipo: 'ILUM', comodo_id: grpId,
-          })
-        }
+    //
+    // ORDEM DE PRIORIDADE PARA AGRUPAMENTO:
+    //   1. Cômodos com grupo_circuito_ilum DECLARADO — o engenheiro,
+    //      olhando a própria planta, decidiu quais cômodos ficam juntos
+    //      por proximidade física (economia de cabo). O sistema NÃO
+    //      detecta isso sozinho (domínio elétrico não tem acesso à
+    //      posição geométrica dos cômodos — são domínios separados por
+    //      design). Respeita o grupo à risca, mesmo que caiba mais de
+    //      um grupo dentro do limite de 800VA — a decisão do engenheiro
+    //      tem prioridade sobre a otimização automática.
+    //   2. Cômodos SEM grupo declarado — comportamento automático
+    //      original preservado (agrupamento sequencial por ordem de
+    //      criação, limite 3 cômodos/800VA). Continua existindo para
+    //      quem não quer se preocupar com isso — é só uma heurística
+    //      de conveniência, não substitui a decisão informada.
+    function gerarCircuitosILUMDeGrupo(lista: typeof comodos_auto, rotuloGrupo?: string) {
+      let grp: string[] = [], grpVA = 0, grpRealW = 0, grpId = '', grpComodos: string[] = []
+      const flush = () => {
+        if (grp.length === 0) return
+        const lampGrupo = grpComodos.flatMap((cid: string) => {
+          const com = comodos.find(x => x.id === cid)
+          return (com as any)?.lampadas ?? []
+        })
+        circs.push({
+          id: crypto.randomUUID(),
+          descricao: `ILUM: ${grp.join(', ')}${rotuloGrupo ? ` [${rotuloGrupo}]` : ''}`,
+          potencia_va:     grpVA,
+          potencia_real_w: grpRealW > 0 ? grpRealW : undefined,
+          lampadas:        lampGrupo.length > 0 ? lampGrupo : undefined,
+          minimo_nbr_va:   grpVA,
+          abaixo_minimo_nbr: false,
+          fase: fases[fi++ % 3],
+          comprimento_m: comprimentoEstimado(comodos.find(x => x.id === grpId)?.tipo ?? 'Sala', 'ILUM'),
+          n_agrup: 1, tipo: 'ILUM', comodo_id: grpId,
+        })
         grp = []; grpVA = 0; grpRealW = 0; grpId = ''; grpComodos = []
       }
-      grp.push(c.nome)
-      grpVA    += c.ilum_va
-      grpRealW += realW
-      grpId = c.id
-      grpComodos.push(c.id)
+
+      lista.forEach(c => {
+        const lumino = (c as any).lumino
+        const realW  = lumino ? Math.round((lumino.n_luminarias || 1) * lumino.luminaria_pot_w) : 0
+        if (grp.length >= 3 || grpVA + c.ilum_va > 800) flush()
+        grp.push(c.nome); grpVA += c.ilum_va; grpRealW += realW
+        grpId = c.id; grpComodos.push(c.id)
+      })
+      flush()
+    }
+
+    const comodosComIlum = comodos_auto.filter(c => c.ilum_va > 0)
+    const gruposDeclarados = new Map<string, typeof comodos_auto>()
+    const semGrupo: typeof comodos_auto = []
+    comodosComIlum.forEach(c => {
+      const rotulo = (c as any).grupo_circuito_ilum?.trim()
+      if (rotulo) {
+        if (!gruposDeclarados.has(rotulo)) gruposDeclarados.set(rotulo, [])
+        gruposDeclarados.get(rotulo)!.push(c)
+      } else {
+        semGrupo.push(c)
+      }
     })
-    if (grp.length > 0) circs.push({
-      id: crypto.randomUUID(), descricao: `ILUM: ${grp.join(', ')}`,
-      potencia_va:     grpVA,
-      potencia_real_w: grpRealW > 0 ? grpRealW : undefined,
-      minimo_nbr_va:   grpVA,
-      abaixo_minimo_nbr: false,
-      fase: fases[fi++ % 3],
-      comprimento_m: 18, n_agrup: 1, tipo: 'ILUM', comodo_id: grpId,
-    })
+    // Cada grupo declarado vira seu(s) próprio(s) circuito(s) — nunca
+    // misturado com cômodos de outro grupo, mesmo que houvesse espaço
+    for (const [rotulo, lista] of gruposDeclarados) {
+      gerarCircuitosILUMDeGrupo(lista, rotulo)
+    }
+    // Resto cai no agrupamento automático de sempre
+    gerarCircuitosILUMDeGrupo(semGrupo)
 
     // TUG
     fi = 0
