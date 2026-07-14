@@ -304,7 +304,7 @@ html, body, #root {
   transition: all .13s; white-space: nowrap; flex-shrink: 0;
 }
 .btn:hover { border-color: var(--gold-mid); color: var(--gold-dark); background: var(--gold-dim); }
-.btn.primary { background: var(--gold-mid); border-color: var(--gold-mid); color: #1a1408; font-weight: 700; box-shadow: 0 2px 6px rgba(201,162,39,.25); }
+.btn.primary { background: var(--gold-mid); border-color: var(--gold-mid); color: #0d1117; font-weight: 700; box-shadow: 0 2px 6px rgba(201,162,39,.25); }
 .btn.primary:hover { background: var(--gold-dark); border-color: var(--gold-dark); color: #fff; }
 .btn.success { background: var(--green); border-color: var(--green); color: #fff; }
 .btn.success:hover { filter: brightness(.92); }
@@ -324,7 +324,7 @@ html, body, #root {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  padding: 13px 15px;
+  padding: 16px 18px;
   box-shadow: var(--sh-xs); min-width: 0;
   position: relative; overflow: hidden;
 }
@@ -337,12 +337,12 @@ html, body, #root {
 .kpi.err::before  { background: var(--red); }
 .kpi.info::before { background: var(--gold-mid); }
 .kpi-lbl {
-  font-size: 9.5px; font-weight: 700; color: var(--text4);
-  text-transform: uppercase; letter-spacing: .08em; margin-bottom: 5px;
+  font-size: 10px; font-weight: 700; color: var(--text4);
+  text-transform: uppercase; letter-spacing: .07em; margin-bottom: 8px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .kpi-val {
-  font-size: 21px; font-weight: 800; color: var(--text);
+  font-size: 22px; font-weight: 800; color: var(--text);
   font-family: var(--mono); letter-spacing: -.5px; line-height: 1;
 }
 .kpi.ok   .kpi-val { color: var(--green); }
@@ -360,27 +360,27 @@ html, body, #root {
 /* ── Cards ────────────────────────────────────────────────────────── */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--sh-sm); min-width: 0; }
 .card-header {
-  padding: 12px 16px;
+  padding: 13px 18px;
   border-bottom: 1px solid var(--border);
-  font-size: 12.5px; font-weight: 700; color: var(--text);
+  font-size: 13px; font-weight: 700; color: var(--text);
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   background: var(--surface); flex-wrap: wrap; min-width: 0;
-  position: relative; padding-left: 19px;
+  position: relative; padding-left: 21px;
 }
 .card-header::before {
   content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
   width: 3px; height: 16px; background: var(--gold-mid); border-radius: 2px;
 }
 /* Card corpo — sem padding fixo, cada página define */
-.card-body { padding: 16px; }
+.card-body { padding: 16px 18px; }
 
 /* ── Formulários ──────────────────────────────────────────────────── */
-.form-grid { display: grid; gap: 11px; }
+.form-grid { display: grid; gap: 14px; }
 .form-grid.c2 { grid-template-columns: 1fr 1fr; }
 .form-grid.c3 { grid-template-columns: 1fr 1fr 1fr; }
 .form-grid.c4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
 .fgroup { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.flabel { font-size: 10.5px; color: var(--text3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .01em; }
+.flabel { font-size: 10.5px; color: var(--text3); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .06em; text-transform: uppercase; }
 .finput, .fselect {
   height: 36px; padding: 0 11px;
   border: 1.5px solid var(--border2); border-radius: var(--r);
@@ -413,7 +413,7 @@ html, body, #root {
 }
 .dtable th.r { text-align: right; }
 .dtable td {
-  padding: 9px 12px; font-size: 12.5px; color: var(--text2);
+  padding: 7px 12px; font-size: 13px; color: var(--text2);
   border-bottom: 1px solid var(--border);
   max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -487,25 +487,38 @@ tr:hover .del-btn { opacity: 1; }
 }
 
 /* ── Seção de eletroduto — NBR 5444 ──────────────────────────────── */
+/* Mesmo padrão visual do .card/.card-header (barra dourada de destaque,
+   sombra em camadas, padding consistente) — antes tinha estilo próprio
+   mais pobre, destoando do resto do app. */
 .eletroduto-trecho {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   background: var(--surface); overflow: hidden;
-  box-shadow: var(--sh-xs);
+  box-shadow: var(--sh-sm);
+  transition: box-shadow .15s, border-color .15s;
+}
+.eletroduto-trecho:hover {
+  box-shadow: var(--sh-md);
+  border-color: var(--border3);
 }
 .eletroduto-trecho .header {
-  padding: 10px 14px; background: var(--surface2);
+  padding: 13px 18px; background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; gap: 9px;
-  font-size: 12px; font-weight: 700;
+  font-size: 13px; font-weight: 700; color: var(--text);
+  position: relative; padding-left: 21px;
+}
+.eletroduto-trecho .header::before {
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 16px; background: var(--gold-mid); border-radius: 2px;
 }
 .eletroduto-trecho .condutores {
-  display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 14px;
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 18px;
 }
 .fio-badge {
-  display: inline-flex; align-items: center; gap: 3px;
-  padding: 3px 8px; border-radius: 20px;
-  font-size: 10px; font-weight: 700; font-family: var(--mono);
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 11px; border-radius: 20px;
+  font-size: 10.5px; font-weight: 700; font-family: var(--mono);
 }
 .fio-badge.fase   { background: var(--blue-dim);   color: var(--blue); }
 .fio-badge.neutro { background: var(--surface3);   color: var(--text3); }

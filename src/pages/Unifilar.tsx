@@ -6,10 +6,10 @@ import { useProjectStore } from '../store/projectStore'
 
 // Cores por tipo de circuito (fiel ao padrão gráfico de projetos elétricos)
 const COR: Record<string, string> = {
-  ILUM: '#0f9d58',  // verde
-  TUG:  '#0f62fe',  // azul
-  TUE:  '#f59e0b',  // âmbar
-  GERAL:'#6929c4',  // roxo
+  ILUM: '#157a4a',  // var(--green) — mesma cor semântica do resto do app
+  TUG:  '#2563eb',  // var(--blue)
+  TUE:  '#c2660a',  // var(--amber)
+  GERAL:'#6d28d9',  // var(--purple)
 }
 
 // ─── Símbolo IEC: disjuntor ─────────────────────────────────────
@@ -31,9 +31,9 @@ function SimDisjuntor({ x, y, cor, label, idr }: {
       {idr && (
         <g>
           <rect x={x - 9} y={y + 37} width={18} height={9} rx={2}
-            fill="#fff1f1" stroke="#da1e28" strokeWidth={0.8} />
+            fill="#fdf0ee" stroke="#c0392b" strokeWidth={0.8} />
           <text x={x} y={y + 44} textAnchor="middle" fontSize={6}
-            fill="#da1e28" fontFamily="monospace" fontWeight={700}>IDR</text>
+            fill="#c0392b" fontFamily="monospace" fontWeight={700}>IDR</text>
         </g>
       )}
     </g>
@@ -45,7 +45,7 @@ function SimCarga({ x, y, tipo, potencia_va, potencia_real_w }: {
   x: number; y: number; tipo: string
   potencia_va: number; potencia_real_w?: number
 }) {
-  const cor    = COR[tipo] || '#8fa0b8'
+  const cor    = COR[tipo] || '#9590a8'
   const kva    = (potencia_va / 1000).toFixed(2)
   const hasReal = potencia_real_w && potencia_real_w > 0 && Math.abs(potencia_real_w - potencia_va) > 10
 
@@ -56,10 +56,10 @@ function SimCarga({ x, y, tipo, potencia_va, potencia_real_w }: {
       <text x={x} y={y + 9} textAnchor="middle" fontSize={7}
         fill={cor} fontFamily="monospace" fontWeight={600}>{tipo}</text>
       <text x={x} y={y + 18} textAnchor="middle" fontSize={6.5}
-        fill="var(--color-text-secondary)" fontFamily="monospace">{kva}kVA</text>
+        fill="var(--text3)" fontFamily="monospace">{kva}kVA</text>
       {hasReal && (
         <text x={x} y={y + 26} textAnchor="middle" fontSize={6}
-          fill="#0f9d58" fontFamily="monospace">{potencia_real_w}W real</text>
+          fill="#157a4a" fontFamily="monospace">{potencia_real_w}W real</text>
       )}
     </g>
   )
@@ -93,7 +93,7 @@ export function Unifilar() {
 
   // Descrição de cada fase por cor
   const FASE_COR: Record<string, string> = {
-    R: '#0f62fe', S: '#0f9d58', T: '#f59e0b', RS: '#8b5cf6', ST: '#8b5cf6', RT: '#8b5cf6', RST: '#6929c4',
+    R: '#2563eb', S: '#157a4a', T: '#c2660a', RS: '#6d28d9', ST: '#6d28d9', RT: '#6d28d9', RST: '#b8901f',
   }
 
   function handleExportar() {
@@ -138,7 +138,7 @@ export function Unifilar() {
         </div>
       ) : (
         <div className="card">
-          <div className="card-header" style={{ background: '#1b2a3d', color: '#e2e8f0' }}>
+          <div className="card-header" style={{ background: '#1a1a28', color: '#e2e8f0' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span style={{ fontWeight: 700, fontSize: 13 }}>
                 QD — {projeto.nome || 'Quadro de Distribuição'}
@@ -172,53 +172,63 @@ export function Unifilar() {
               viewBox={`0 0 ${Math.max(SVG_W, 600)} ${SVG_H}`}
               style={{ display: 'block', fontFamily: 'monospace' }}
             >
-              {/* Grade de fundo */}
+              {/* Sombra suave para dar profundidade aos símbolos — a
+                  diferença entre "desenho técnico plano" e peça acabada */}
+              <defs>
+                <filter id="unifilarShadow" x="-30%" y="-30%" width="160%" height="160%">
+                  <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" floodColor="#1a1a28" floodOpacity="0.14" />
+                </filter>
+              </defs>
+
+              {/* Grade de fundo — tom quente, alinhado à paleta do app */}
               {Array.from({ length: Math.ceil(SVG_H / 20) }, (_, i) => (
                 <line key={i} x1={0} y1={i * 20} x2={Math.max(SVG_W, 600)} y2={i * 20}
-                  stroke="#e8edf2" strokeWidth={0.4} />
+                  stroke="#e8e3d8" strokeWidth={0.4} />
               ))}
+
+              <g filter="url(#unifilarShadow)">
 
               {/* ── Ramal de entrada (concessionária → DG) ── */}
               {/* Texto concessionária */}
               <text x={MARGIN_LEFT / 2} y={24} textAnchor="middle" fontSize={9}
-                fill="#5a6680" fontFamily="monospace" fontWeight={600}>
+                fill="#5a5670" fontFamily="monospace" fontWeight={600}>
                 {(projeto as any).concessionaria || 'CEMIG'}
               </text>
               <text x={MARGIN_LEFT / 2} y={36} textAnchor="middle" fontSize={7.5}
-                fill="#8fa0b8" fontFamily="monospace">
+                fill="#9590a8" fontFamily="monospace">
                 {(projeto as any).v_fase}/{(projeto as any).v_linha}V
               </text>
 
               {/* Condutor ramal */}
               <line x1={MARGIN_LEFT / 2} y1={38} x2={MARGIN_LEFT / 2} y2={BARRA_Y - 80}
-                stroke="#2d3748" strokeWidth={2.5} />
+                stroke="#2e2d3d" strokeWidth={2.5} />
 
               {/* Medidor (retângulo com "kWh") */}
               <rect x={MARGIN_LEFT / 2 - 14} y={BARRA_Y - 80} width={28} height={20} rx={3}
-                fill="#fff" stroke="#5a6680" strokeWidth={1} />
+                fill="#fff" stroke="#5a5670" strokeWidth={1} />
               <text x={MARGIN_LEFT / 2} y={BARRA_Y - 67} textAnchor="middle" fontSize={7}
-                fill="#5a6680" fontFamily="monospace" fontWeight={600}>kWh</text>
+                fill="#5a5670" fontFamily="monospace" fontWeight={600}>kWh</text>
 
               {/* Condutor do medidor ao DG */}
               <line x1={MARGIN_LEFT / 2} y1={BARRA_Y - 60} x2={MARGIN_LEFT / 2} y2={BARRA_Y - 46}
-                stroke="#2d3748" strokeWidth={2.5} />
+                stroke="#2e2d3d" strokeWidth={2.5} />
 
               {/* Disjuntor Geral */}
               <SimDisjuntor
                 x={MARGIN_LEFT / 2} y={BARRA_Y - 46}
-                cor="#1b2a3d"
+                cor="#1a1a28"
                 label={demanda ? `${demanda.in_geral}A` : 'DG'}
                 idr={false}
               />
 
               {/* Condutor DG → Barra */}
               <line x1={MARGIN_LEFT / 2} y1={BARRA_Y - 46 + 24} x2={MARGIN_LEFT / 2} y2={BARRA_Y}
-                stroke="#2d3748" strokeWidth={2.5} />
+                stroke="#2e2d3d" strokeWidth={2.5} />
 
               {/* Seção do ramal */}
               {demanda && (
                 <text x={MARGIN_LEFT / 2 + 8} y={BARRA_Y - 20} fontSize={7.5}
-                  fill="#8fa0b8" fontFamily="monospace">
+                  fill="#9590a8" fontFamily="monospace">
                   {demanda.ramal_min_mm2}mm²
                 </text>
               )}
@@ -226,11 +236,11 @@ export function Unifilar() {
               {/* ── Barra de distribuição ── */}
               <rect x={BARRA_X0 - 4} y={BARRA_Y - BARRA_H / 2}
                 width={BARRA_X1 - BARRA_X0 + 8} height={BARRA_H}
-                rx={2} fill="#1b2a3d" />
+                rx={2} fill="#1a1a28" />
 
               {/* Label da barra */}
               <text x={BARRA_X1 + 12} y={BARRA_Y + 2} textAnchor="start" fontSize={8}
-                fill="#5a6680" fontFamily="monospace" fontWeight={600}>
+                fill="#5a5670" fontFamily="monospace" fontWeight={600}>
                 BARRA — {demanda?.n_total_qd || N}DIN
               </text>
 
@@ -238,10 +248,10 @@ export function Unifilar() {
               {ci.map((c, i) => {
                 const r    = raw[i]
                 const x    = BARRA_X0 + i * CIRC_STEP + CIRC_STEP / 2
-                const cor  = COR[c.tipo] || '#8fa0b8'
-                const fCor = FASE_COR[c.fase] || '#8fa0b8'
+                const cor  = COR[c.tipo] || '#9590a8'
+                const fCor = FASE_COR[c.fase] || '#9590a8'
                 const statusSym = c.status === 'OK' ? '●' : c.status === 'LIMITE' ? '△' : '✗'
-                const statusCor = c.status === 'OK' ? '#0f9d58' : c.status === 'LIMITE' ? '#f59e0b' : '#da1e28'
+                const statusCor = c.status === 'OK' ? '#157a4a' : c.status === 'LIMITE' ? '#c2660a' : '#c0392b'
                 const realW = (c as any).potencia_real_w
 
                 return (
@@ -256,7 +266,7 @@ export function Unifilar() {
                     {/* Seção do condutor */}
                     {c.secao_fase > 0 && (
                       <text x={x + 4} y={BARRA_Y + VERT_LEN / 2} fontSize={6.5}
-                        fill="#8fa0b8" fontFamily="monospace">
+                        fill="#9590a8" fontFamily="monospace">
                         {c.secao_fase}mm²
                       </text>
                     )}
@@ -292,7 +302,7 @@ export function Unifilar() {
 
                     {/* N° do circuito */}
                     <text x={x} y={BARRA_Y - 10} textAnchor="middle" fontSize={7.5}
-                      fill="#8fa0b8" fontFamily="monospace">
+                      fill="#9590a8" fontFamily="monospace">
                       {String(i + 1).padStart(2, '0')}
                     </text>
 
@@ -309,7 +319,7 @@ export function Unifilar() {
                     {/* ΔV% */}
                     {c.du_calc > 0 && (
                       <text x={x} y={SVG_H - 4} textAnchor="middle" fontSize={6.5}
-                        fill={c.du_calc <= 4 ? '#0f9d58' : '#da1e28'} fontFamily="monospace">
+                        fill={c.du_calc <= 4 ? '#157a4a' : '#c0392b'} fontFamily="monospace">
                         {c.du_calc.toFixed(1)}%
                       </text>
                     )}
@@ -329,6 +339,7 @@ export function Unifilar() {
                     fill={cor} fontFamily="monospace" fontWeight={600}>{fase}</text>
                 </g>
               ))}
+              </g>
             </svg>
           </div>
         </div>
@@ -339,7 +350,7 @@ export function Unifilar() {
         <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11, color: 'var(--text3)', lineHeight: 1.7 }}>
           <strong>Diagrama unifilar simplificado</strong> conforme NBR 5410 / IEC 60364 — Layout: ramal → medidor → disjuntor geral → barra de distribuição → circuitos. Seções, comprimentos e ΔV% anotados em cada derivação. Exporte SVG para incluir na prancha do projeto.
           {ci.some(c => (c as any).potencia_real_w) && (
-            <><br /><strong style={{ color: '#0f9d58' }}>Verde itálico</strong> = potência real instalada (LED real) vs. potência de dimensionamento do cabo.</>
+            <><br /><strong style={{ color: '#157a4a' }}>Verde itálico</strong> = potência real instalada (LED real) vs. potência de dimensionamento do cabo.</>
           )}
         </div>
       )}
