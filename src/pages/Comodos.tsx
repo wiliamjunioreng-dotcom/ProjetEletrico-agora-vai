@@ -269,6 +269,7 @@ export function Comodos() {
   const [formCarga, setFormCarga] = useState({
     tipo: 'TUG' as 'ILUM'|'TUG'|'TUE'|'GERAL',
     descricao: '', potencia_va: 100, qtd: 1, fase: 'mono' as 'mono'|'bi'|'tri',
+    volume_banheiro: 'fora' as 'V0'|'V1'|'V2'|'V3'|'fora',
   })
   const [lumModalComodo, setLumModalComodo] = useState<string | null>(null)
   const [form,     setForm]     = useState<Form>(EMPTY)
@@ -945,6 +946,7 @@ export function Comodos() {
           const abaixoIlum = c.ilum_va < ilumNBRc
           const abaixoTug  = c.tug_va  < tugNBRc
           const violacoesNBR9 = verificarComodoNBR9(c).filter(v => !v.conforme)
+          const errosNBR9 = violacoesNBR9.filter(v => v.severidade === 'erro' || v.severidade === 'fisico_critico')
 
           return (
             <div key={c.id} className="card" style={{ position: 'relative', overflow: 'visible' }}>
@@ -966,12 +968,14 @@ export function Comodos() {
                 <div>
                   <span style={{ fontWeight: 600 }}>{c.nome}</span>
                   {violacoesNBR9.length > 0 && (
-                    <span style={{
+                    <span title={violacoesNBR9.map(v => v.descricao).join(' · ')} style={{
                       marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '1px 5px',
-                      borderRadius: 4, background: 'var(--amber-dim)', color: 'var(--amber)',
-                      border: '1px solid var(--amber)',
+                      borderRadius: 4,
+                      background: errosNBR9.length > 0 ? 'rgba(220,38,38,.12)' : 'var(--amber-dim)',
+                      color: errosNBR9.length > 0 ? 'var(--red)' : 'var(--amber)',
+                      border: `1px solid ${errosNBR9.length > 0 ? 'var(--red)' : 'var(--amber)'}`,
                     }}>
-                      ⚠ {violacoesNBR9.length} aviso{violacoesNBR9.length > 1 ? 's' : ''} NBR
+                      {errosNBR9.length > 0 ? '⛔' : '⚠'} {violacoesNBR9.length} {errosNBR9.length > 0 ? 'violação(ões)' : 'aviso(s)'} NBR
                     </span>
                   )}
                   <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 8 }}>
@@ -1057,11 +1061,38 @@ export function Comodos() {
                       <span style={{ color:'var(--text4)' }}>{cm.tipo}</span> {cm.descricao}
                       <span style={{ color:'var(--text4)', marginLeft:5 }}>{cm.qtd}×{cm.potencia_va}VA</span>
                       {cm.abaixo_nbr && <span style={{ color:'var(--amber)', marginLeft:4, fontSize:9 }}>⚠ abaixo NBR</span>}
+                      {(cm as any).volume_banheiro && (cm as any).volume_banheiro !== 'fora' && (
+                        <span style={{
+                          color: ['V0','V1'].includes((cm as any).volume_banheiro) ? 'var(--red)'
+                               : (cm as any).volume_banheiro === 'V2' && cm.tipo === 'TUG' ? 'var(--red)'
+                               : 'var(--text4)',
+                          marginLeft:4, fontSize:9, fontWeight:700,
+                        }}>
+                          · Vol.{(cm as any).volume_banheiro.slice(1)}
+                        </span>
+                      )}
                     </span>
                     <button style={{ fontSize:9, color:'var(--text4)', background:'none', border:'none', cursor:'pointer', padding:0 }}
                       onClick={() => removeCargaManual(c.id, cm.id)}>✕</button>
                   </div>
                 ))}
+                {c.tipo === 'Banho' && (
+                  <div style={{ marginTop:6, marginBottom:2 }}>
+                    <label style={{ fontSize:9, color:'var(--text4)', display:'block', marginBottom:2 }}
+                      title="NBR 5410 §9.1 — restringe o tipo de equipamento permitido conforme a proximidade com a fonte de água">
+                      Zona (Volume 0-3, distância à banheira/box)
+                    </label>
+                    <select value={formCarga.volume_banheiro}
+                      onChange={e => setFormCarga(f => ({ ...f, volume_banheiro: e.target.value as any }))}
+                      style={{ fontSize:10, padding:'4px 6px', width:'100%', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:4 }}>
+                      <option value="fora">Fora dos volumes (recomendado p/ tomadas)</option>
+                      <option value="V3">Volume 3 — até ~3,00m (tomada OK c/ IDR)</option>
+                      <option value="V2">Volume 2 — até 0,60m (tomada NÃO permitida)</option>
+                      <option value="V1">Volume 1 — acima da banheira/box (só equip. fixo)</option>
+                      <option value="V0">Volume 0 — dentro da banheira/box (só SELV≤12V)</option>
+                    </select>
+                  </div>
+                )}
                 <div style={{ display:'grid', gridTemplateColumns:'56px 1fr 64px 36px 36px auto', gap:4, alignItems:'end', marginTop:6 }}>
                   <select value={formCarga.tipo}
                     onChange={e => setFormCarga(f => ({ ...f, tipo: e.target.value as any }))}
@@ -1092,8 +1123,9 @@ export function Comodos() {
                         tipo: formCarga.tipo, descricao: formCarga.descricao || `${formCarga.tipo} ${c.nome}`,
                         potencia_va: formCarga.potencia_va, qtd: formCarga.qtd, fase: formCarga.fase,
                         abaixo_nbr: formCarga.potencia_va * formCarga.qtd < nbr, nbr_min_va: nbr,
+                        ...(c.tipo === 'Banho' ? { volume_banheiro: formCarga.volume_banheiro } : {}),
                       })
-                      setFormCarga(f => ({ ...f, descricao:'', potencia_va:100, qtd:1 }))
+                      setFormCarga(f => ({ ...f, descricao:'', potencia_va:100, qtd:1, volume_banheiro:'fora' }))
                     }}>+</button>
                 </div>
               </div>

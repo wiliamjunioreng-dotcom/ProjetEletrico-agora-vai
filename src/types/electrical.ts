@@ -178,6 +178,12 @@ export interface CargaManual {
   readonly abaixo_nbr:  boolean
   readonly nbr_min_va:  number
 
+  // Zona de instalação em locais contendo banheira/chuveiro — NBR 5410
+  // §9.1, Volumes 0 a 3. DECLARADA pelo engenheiro (não detectada por
+  // geometria — o sistema não modela a posição 3D da banheira/box).
+  // Só relevante quando o cômodo é do tipo 'Banho'; ignorada nos demais.
+  readonly volume_banheiro?: 'V0' | 'V1' | 'V2' | 'V3' | 'fora'
+
   // ── Conexões físicas (preenchidas ao completar o projeto) ────────
   // Ponto elétrico que materializa esta carga na planta
   readonly ponto_id?:   string   // ID de PontoEletrico

@@ -12,6 +12,10 @@
 //   §9.6.3.2 — TUG em banheiro: min 1, junto ao lavatório
 //   §9.6.3.3 — TUG em garagem/áreas externas: min 1
 //   §9.6.4 — TUE: circuito dedicado para cargas ≥ 1500W
+//   §9.1   — Volumes 0 a 3 em locais contendo banheira/chuveiro
+//            (equivalente a IEC 60364-7-701, zonas de proximidade
+//            com água). Restringe o TIPO de equipamento elétrico
+//            permitido conforme a distância até a fonte de água.
 // ════════════════════════════════════════════════════════════════
 
 import type { ResultadoNorma } from './context'
@@ -21,6 +25,10 @@ const N = 'ABNT NBR 5410:2004+Em1:2008'
 
 function aviso(codigo: string, descricao: string, norma: string, valor?: number, limite?: number): ResultadoNorma {
   return { codigo, descricao, norma, severidade: 'aviso', conforme: false, valor, limite }
+}
+
+function erro(codigo: string, descricao: string, norma: string, acao?: string): ResultadoNorma {
+  return { codigo, descricao, norma, severidade: 'erro', conforme: false, acao_sugerida: acao }
 }
 
 // ── §9.6.3 — Quantidade mínima de TUG por comprimento de parede ──
@@ -169,12 +177,73 @@ export function verificarILUMMinima(comodo: Comodo): ResultadoNorma[] {
   return resultados
 }
 
+// ── §9.1 — Volumes 0 a 3 em locais com banheira/chuveiro ──────────
+// A norma restringe o TIPO de equipamento elétrico permitido conforme
+// a proximidade com a fonte de água — não a quantidade, como as outras
+// regras §9.6 acima. Zona DECLARADA pelo engenheiro (campo
+// CargaManual.volume_banheiro), não detectada por geometria.
+//
+// Faixas de referência usuais (IEC 60364-7-701 / prática NBR 5410 —
+// confira contra o documento físico da norma para o projeto formal):
+//   Volume 0: dentro da banheira/box do chuveiro
+//   Volume 1: acima, até 2,25m de altura
+//   Volume 2: até 0,60m além do Volume 1
+//   Volume 3: até 2,40m além do Volume 2 (total ~3,00m da banheira/box)
+//
+// Restrições:
+//   V0, V1: nenhuma tomada ou interruptor padrão é permitido — só
+//           equipamento fixo apropriado ao local (o próprio chuveiro,
+//           por exemplo), com grau de proteção IP adequado.
+//   V2:     tomada padrão NÃO é permitida (só tomada de barbear com
+//           transformador de isolamento — exceção não modelada aqui;
+//           tratado como não permitido por segurança/simplicidade).
+//   V3:     tomada é permitida, mas IDR 30mA é obrigatório — já
+//           garantido pela regra geral de área molhada (ehAreaMolhada)
+//           para qualquer circuito num cômodo tipo Banho, então aqui
+//           é só confirmação informativa.
+export function verificarVolumesBanheiro(comodo: Comodo): ResultadoNorma[] {
+  if (comodo.tipo !== 'Banho') return []
+  const resultados: ResultadoNorma[] = []
+
+  for (const carga of comodo.cargas_manuais) {
+    const vol = carga.volume_banheiro
+    if (!vol || vol === 'fora') continue
+
+    const tipo_ponto = carga.tipo === 'ILUM' ? 'ponto de iluminação' : 'tomada/ponto elétrico'
+
+    if (vol === 'V0' || vol === 'V1') {
+      resultados.push(erro(
+        `NBR5410.9.1.Volume${vol}`,
+        `"${carga.descricao}": ${tipo_ponto} declarado no Volume ${vol.slice(1)} — não permitido equipamento elétrico padrão nesta zona (só equipamento fixo apropriado, ex: o próprio chuveiro, com IP adequado)`,
+        `${N} §9.1 — Volume ${vol.slice(1)}`,
+        `Reposicione o ponto para fora do Volume ${vol.slice(1)}, ou verifique se este é realmente um equipamento fixo apropriado à zona (não uma tomada/interruptor comum).`
+      ))
+    } else if (vol === 'V2' && carga.tipo === 'TUG') {
+      resultados.push(erro(
+        'NBR5410.9.1.VolumeV2',
+        `"${carga.descricao}": tomada declarada no Volume 2 — tomada padrão não é permitida nesta zona (exceção: tomada de barbear com transformador de isolamento, não coberta por este sistema)`,
+        `${N} §9.1 — Volume 2`,
+        'Reposicione a tomada para o Volume 3 ou fora dos volumes (recomendado: mínimo 0,60m da banheira/box).'
+      ))
+    } else if (vol === 'V3') {
+      resultados.push({
+        codigo: 'NBR5410.9.1.VolumeV3', conforme: true, severidade: 'info',
+        descricao: `"${carga.descricao}": no Volume 3 — permitido com IDR 30mA (já obrigatório para este cômodo)`,
+        norma: `${N} §9.1 — Volume 3`,
+      })
+    }
+  }
+
+  return resultados
+}
+
 // ── Verificação completa do cômodo ────────────────────────────────
 export function verificarComodoNBR9(comodo: Comodo): ResultadoNorma[] {
   return [
     ...verificarTUGMinimas(comodo),
     ...verificarCircuitosDedicados(comodo),
     ...verificarILUMMinima(comodo),
+    ...verificarVolumesBanheiro(comodo),
   ]
 }
 
