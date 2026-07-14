@@ -3,76 +3,79 @@
 /* Referência visual: linguagem editorial-profissional, calorosa e polida */
 
 /* ── Google Fonts (fallback local caso offline) ───────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Sem import de fonte web — mesma stack de sistema do LumenSolar (identidade compartilhada) */
 
 /* ── Tema Light ────────────────────────────────────────────────── */
 :root, [data-theme="light"] {
-  /* Superfícies — off-white cálido, não cinza-azulado frio */
-  --bg:        #f6f4ef;
+  /* Superfícies — valores EXATOS do LumenSolar (D.bg/D.card), mesma
+     empresa, identidade visual total, não aproximação */
+  --bg:        #f5f4f0;
   --surface:   #ffffff;
-  --surface2:  #faf9f5;
-  --surface3:  #f0ede4;
+  --surface2:  #f5f4f0;
+  --surface3:  #f0ece4;
 
-  /* Bordas — suaves, quentes */
-  --border:    #e8e3d8;
-  --border2:   #ddd6c6;
-  --border3:   #c9bfa8;
+  /* Bordas — D.border / D.borderLight exatos */
+  --border:      #e8e3d8;
+  --border-light:#f0ece4;
+  --border2:     #ddd6c6;
+  --border3:     #c9bfa8;
 
-  /* Texto — hierarquia de 4 níveis */
+  /* Texto — D.text / D.textSub / D.textMuted exatos */
   --text:      #1a1a28;
   --text2:     #2e2d3d;
   --text3:     #5a5670;
   --text4:     #9590a8;
 
-  /* Dourado — cor de marca/destaque */
-  --gold:      #b8901f;
+  /* Dourado — D.gold / D.goldLight / D.goldMuted exatos */
+  --gold:      #c9a227;
   --gold-dark: #96741a;
   --gold-mid:  #c9a227;
+  --gold-light:#e8c547;
   --gold-dim:  #faf3e0;
-  --gold-line: rgba(184,144,31,.14);
+  --gold-line: rgba(201,162,39,.188);
 
-  /* Azul — ação/interação (botões primários, foco) */
+  /* Azul — D.blue exato */
   --blue:      #2563eb;
   --blue-dark: #1d4ed8;
   --blue-mid:  #3b82f6;
   --blue-dim:  #eef4ff;
   --blue-line: rgba(37,99,235,.12);
 
-  /* Semânticas */
-  --green:     #157a4a;   --green-dim: #eafaf1;
-  --amber:     #c2660a;   --amber-dim: #fef3e2;
+  /* Semânticas — D.success/D.danger exatos onde existem */
+  --green:     #16803d;   --green-dim: #dcfce7;
+  --amber:     #78350f;   --amber-dim: #fffbeb;
   --red:       #c0392b;   --red-dim:   #fdf0ee;
   --purple:    #6d28d9;   --purple-dim:#f3edff;
   --cyan:      #0891b2;   --cyan-dim:  #e0f7fa;
 
-  /* Sidebar — escura, elegante */
-  --sb-bg:     #14131c;
-  --sb-bg2:    #1c1a28;
+  /* Sidebar — D.sidebar/D.header exatos */
+  --sb-bg:     #0a0b0f;
+  --sb-bg2:    #0d1117;
   --sb-text:   #8a8698;
   --sb-active: rgba(201,162,39,.16);
   --sb-act-t:  #e8c547;
   --sb-label:  #4a465a;
   --sb-border: rgba(255,255,255,.06);
 
-  /* Tipografia */
-  --font:   'Inter', -apple-system, 'Segoe UI', sans-serif;
-  --mono:   'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  /* Tipografia — mesma stack de SISTEMA do LumenSolar, sem fonte web */
+  --font:   -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --mono:   ui-monospace, 'SF Mono', 'Cascadia Code', 'Segoe UI Mono', monospace;
 
-  /* Geometria — generosa, arredondada */
-  --r:      8px;
+  /* Geometria — D: input=7px, card/kpi=12px, exatos */
+  --r:      7px;
   --r-lg:   12px;
   --gap:    10px;
   --pad:    20px;
 
-  /* Elevação — sombras suaves, em camadas */
-  --sh-xs:  0 1px 2px rgba(20,15,5,.05);
-  --sh-sm:  0 1px 4px rgba(20,15,5,.07), 0 4px 14px rgba(20,15,5,.04);
-  --sh-md:  0 2px 10px rgba(20,15,5,.09), 0 8px 24px rgba(20,15,5,.05);
+  /* Elevação — D.shadow/D.shadowMd exatos (preto puro, não tingido) */
+  --sh-xs:  0 1px 2px rgba(0,0,0,.05);
+  --sh-sm:  0 1px 4px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.04);
+  --sh-md:  0 2px 8px rgba(0,0,0,.10);
 
   /* Cores de circuito */
-  --c-ilum:  #157a4a;
+  --c-ilum:  #16803d;
   --c-tug:   #2563eb;
-  --c-tue:   #c2660a;
+  --c-tue:   #b45309;
   --c-geral: #6d28d9;
 }
 
@@ -133,7 +136,7 @@
 html, body, #root {
   height: 100%; width: 100%;
   font-family: var(--font);
-  font-size: 13.5px; line-height: 1.45;
+  font-size: 14px; line-height: 1.45;
   background: var(--bg); color: var(--text);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -361,7 +364,7 @@ html, body, #root {
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--sh-sm); min-width: 0; }
 .card-header {
   padding: 13px 18px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-light);
   font-size: 13px; font-weight: 700; color: var(--text);
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   background: var(--surface); flex-wrap: wrap; min-width: 0;
@@ -380,7 +383,7 @@ html, body, #root {
 .form-grid.c3 { grid-template-columns: 1fr 1fr 1fr; }
 .form-grid.c4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
 .fgroup { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.flabel { font-size: 10.5px; color: var(--text3); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .06em; text-transform: uppercase; }
+.flabel { font-size: 11px; color: var(--text4); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .06em; text-transform: uppercase; }
 .finput, .fselect {
   height: 36px; padding: 0 11px;
   border: 1.5px solid var(--border2); border-radius: var(--r);
@@ -406,22 +409,22 @@ html, body, #root {
 .dtable { width: 100%; border-collapse: collapse; background: var(--surface); min-width: 0; }
 .dtable thead { position: sticky; top: 0; z-index: 5; }
 .dtable th {
-  padding: 8px 12px; font-size: 10px; font-weight: 700;
+  padding: 8px 12px; font-size: 11px; font-weight: 700;
   text-align: left; color: var(--text4);
-  background: var(--surface2); border-bottom: 1px solid var(--border);
-  white-space: nowrap; text-transform: uppercase; letter-spacing: .06em;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  white-space: nowrap; text-transform: uppercase; letter-spacing: .05em;
 }
 .dtable th.r { text-align: right; }
 .dtable td {
   padding: 7px 12px; font-size: 13px; color: var(--text2);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-light);
   max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .dtable td.name { color: var(--text); font-weight: 600; max-width: 260px; }
 .dtable td.mono { font-family: var(--mono); font-size: 12px; }
 .dtable td.r { text-align: right; }
 .dtable tr:last-child td { border-bottom: none; }
-.dtable tr:hover td { background: var(--gold-dim); }
+.dtable tr:hover td { background: #fafaf8; }
 .dtable input[type=text], .dtable input[type=number] {
   background: transparent; border: none; outline: none;
   font-family: var(--font); font-size: 12.5px; color: var(--text); width: 100%;
@@ -442,10 +445,13 @@ html, body, #root {
   font-size: 10px; font-weight: 700;
   padding: 2px 8px; border-radius: 20px; letter-spacing: .02em;
 }
-.badge.ilum { background: var(--green-dim); color: var(--green); }
-.badge.tug  { background: var(--blue-dim);  color: var(--blue);  }
-.badge.tue  { background: var(--amber-dim); color: var(--amber); }
-.badge.idr  { background: var(--red-dim);   color: var(--red);   }
+/* .badge-green/.badge-blue exatos do LumenSolar; TUE/IDR derivados
+   com o mesmo padrão de contraste (pastel claro + texto saturado
+   escuro) — a referência não tem esses dois domínios específicos */
+.badge.ilum { background: #dcfce7; color: #15803d; }
+.badge.tug  { background: #dbeafe; color: #1e40af; }
+.badge.tue  { background: #fef3c7; color: #92400e; }
+.badge.idr  { background: #fee2e2; color: #b91c1c; }
 
 /* Status */
 .c-ok   { color: var(--green); font-weight: 700; }
@@ -471,10 +477,11 @@ tr:hover .del-btn { opacity: 1; }
 
 /* ── Toast/mensagens inline ───────────────────────────────────────── */
 .toast-bar { font-size: 11.5px; padding: 7px 12px; border-radius: var(--r); font-family: var(--font); font-weight: 500; }
-.toast-bar.ok  { background: var(--green-dim); border: 1px solid rgba(21,122,74,.25); color: var(--green); }
-.toast-bar.err { background: var(--red-dim);   border: 1px solid rgba(192,57,43,.25);   color: var(--red); }
-.toast-bar.info{ background: var(--gold-dim);  border: 1px solid var(--gold-line);  color: var(--gold-dark); }
-.toast-bar.warn{ background: var(--amber-dim); border: 1px solid rgba(194,102,10,.25); color: var(--amber); }
+/* Trios exatos dos .info-box/.info-box-green/.info-box-blue do LumenSolar */
+.toast-bar.ok   { background: #f0fdf4; border: 1px solid #bbf7d0; color: #14532d; }
+.toast-bar.err  { background: var(--red-dim); border: 1px solid #fca5a5; color: var(--red); }
+.toast-bar.info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a5f; }
+.toast-bar.warn { background: #fffbeb; border: 1px solid #fde68a; color: #78350f; }
 
 /* ── Tooltip normativo ────────────────────────────────────────────── */
 .tooltip-violation {
