@@ -560,3 +560,89 @@ ${projeto.empresa ? ' — ' + projeto.empresa : ''}
 
   download(html, `manual_usuario_${projeto.nome.replace(/[^a-z0-9]/gi, '_')}.html`, 'text/html')
 }
+
+// ── Plano de Manutenção — companheiro do Manual do Usuário ───────
+// Conteúdo de BOA PRÁTICA GERAL de manutenção elétrica residencial/
+// comercial — intervalos são recomendação de mercado amplamente aceita,
+// NÃO citação de um artigo/tabela específica da NBR 5410 com número de
+// cláusula. Rotulado como tal na própria peça, sem forjar precisão
+// normativa que não foi verificada nesta sessão.
+export function exportarPlanoManutencao(
+  projeto: ProjetoExport,
+  circuitos: CircuitResult[],
+): void {
+  const ci = circuitos.filter(c => c.potencia_va > 0)
+  const temDR = ci.some(c => c.idr)
+  const data = new Date().toLocaleDateString('pt-BR')
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Plano de Manutenção — ${projeto.empresa ? projeto.empresa + " — " : ""}${projeto.nome}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #1a1a1a;
+         background: white; padding: 2cm; line-height: 1.5; }
+  h1 { font-size: 18pt; text-align: center; color: #1B2A3B; margin-bottom: 4pt; }
+  h2 { font-size: 13pt; margin: 16pt 0 6pt; color: #1B2A3B; }
+  p  { margin: 6pt 0; text-align: justify; }
+  table { width: 100%; border-collapse: collapse; margin: 10pt 0; font-size: 10pt; }
+  th, td { border: 1px solid #ccc; padding: 6pt 8pt; }
+  th { background: #1B2A3B; color: white; text-align: center; }
+  td { text-align: left; }
+  td.freq { text-align: center; font-weight: 700; color: #0696d7; white-space: nowrap; }
+  .aviso-fonte { background: #fffbeb; border-left: 4px solid #d97706; padding: 8pt 12pt;
+                 margin: 12pt 0; font-size: 9.5pt; color: #78350f; }
+  @media print { body { padding: 1.5cm; } .no-print { display: none; } }
+</style>
+</head>
+<body>
+
+<div class="no-print" style="position:fixed;top:10px;right:10px">
+  <button onclick="window.print()" style="padding:8px 16px;background:#0696d7;color:white;border:none;border-radius:6px;cursor:pointer">
+    Imprimir / Salvar PDF
+  </button>
+</div>
+
+${projeto.empresa ? `<p style="text-align:center;font-weight:700;color:#1B2A3B">${projeto.empresa}</p>` : ''}
+<h1>PLANO DE MANUTENÇÃO</h1>
+<p style="text-align:center;color:#666">Instalação Elétrica — ${projeto.nome}</p>
+<p style="text-align:center;font-size:9pt;color:#999">Emitido em ${data}</p>
+
+<div class="aviso-fonte">
+  Os intervalos abaixo seguem boa prática geral de manutenção elétrica
+  residencial/comercial amplamente aceita no mercado — não são citação
+  de um número de tabela específico da NBR 5410. Ajuste conforme a
+  orientação do fabricante dos equipamentos instalados e a rotina real
+  de uso da edificação.
+</div>
+
+<h2>Rotina recomendada</h2>
+<table>
+  <tr><th style="width:20%">Frequência</th><th>Item</th></tr>
+  <tr><td class="freq">Mensal</td><td>${temDR ? 'Testar o(s) dispositivo(s) DR pelo botão "T" — deve desarmar imediatamente.' : 'Verificar visualmente se algum disjuntor está superaquecido ao toque.'}</td></tr>
+  <tr><td class="freq">Trimestral</td><td>Inspecionar visualmente o quadro de distribuição — sinais de superaquecimento, mau cheiro, fiação solta ou danificada.</td></tr>
+  <tr><td class="freq">Semestral</td><td>Verificar aperto dos parafusos de conexão no quadro de distribuição (terminais de disjuntores e barramentos podem afrouxar com dilatação térmica ao longo do tempo).</td></tr>
+  <tr><td class="freq">Anual</td><td>Solicitar inspeção de um eletricista/engenheiro para verificação geral da instalação, incluindo medição de resistência de aterramento.</td></tr>
+  <tr><td class="freq">Sempre que notar</td><td>Disjuntor desarmando com frequência, cheiro de queimado, tomadas quentes ao toque, lâmpadas piscando sem padrão: interromper o uso do circuito e chamar um profissional imediatamente.</td></tr>
+</table>
+
+<h2>Circuitos com proteção DR nesta instalação</h2>
+${temDR ? `
+<table>
+  <tr><th>Circuito</th><th>Corrente do DR</th></tr>
+  ${ci.filter(c => c.idr).map(c => `<tr><td>${c.descricao}</td><td style="text-align:center">${c.idr_in}A / 30mA</td></tr>`).join('')}
+</table>
+` : '<p>Nenhum circuito com DR identificado neste projeto.</p>'}
+
+<p style="margin-top:24pt;font-size:9pt;color:#999;text-align:center">
+Responsável Técnico: ${projeto.projetista} — CREA ${projeto.crea}
+${projeto.empresa ? ' — ' + projeto.empresa : ''}
+</p>
+
+</body>
+</html>`
+
+  download(html, `plano_manutencao_${projeto.nome.replace(/[^a-z0-9]/gi, '_')}.html`, 'text/html')
+}

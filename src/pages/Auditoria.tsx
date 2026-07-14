@@ -95,6 +95,7 @@ export default function Auditoria() {
             du_max_pct: projeto.du_max_pct,
             du_ramal_pct: projeto.du_ramal_pct,
             icc_rede_ka: projeto.icc_rede_ka,
+            secao_minima_preset_mm2: (projeto as any).secao_minima_preset_mm2,
           }))
         } catch { /* circuito inválido — ignora */ }
       }

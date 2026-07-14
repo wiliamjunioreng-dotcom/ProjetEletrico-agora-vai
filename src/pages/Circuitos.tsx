@@ -628,7 +628,7 @@ export function Circuitos() {
           du_max_pct: projeto.du_max_pct,
           du_ramal_pct: projeto.du_ramal_pct,
           icc_rede_ka: projeto.icc_rede_ka,
-          v_linha_ref: projeto.v_linha,
+          v_linha_ref: projeto.v_linha, secao_minima_preset_mm2: (projeto as any).secao_minima_preset_mm2,
         }))
       } catch { /* circuito inválido */ }
     }

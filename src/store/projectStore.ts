@@ -570,7 +570,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           isolacao: projeto.isolacao as any, material: projeto.material_cabo as any,
           t_amb: projeto.t_amb, du_max_pct: projeto.du_max_pct,
           du_ramal_pct: projeto.du_ramal_pct, icc_rede_ka: projeto.icc_rede_ka,
-          v_linha_ref: projeto.v_linha,
+          v_linha_ref: projeto.v_linha, secao_minima_preset_mm2: (projeto as any).secao_minima_preset_mm2,
         })
         return p.execution.confianca !== 'inviavel'
       } catch { return false }
@@ -743,6 +743,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         isolacao: projeto.isolacao, material: projeto.material_cabo,
         t_amb: projeto.t_amb, du_max: projeto.du_max_pct,
         du_ramal: projeto.du_ramal_pct, icc_rede_ka: projeto.icc_rede_ka,
+        secao_minima_preset_mm2: (projeto as any).secao_minima_preset_mm2,
       })
       const calc = {
         potencia_va: pot_va, potencia_real_w: pot_real > 0 ? pot_real : undefined,

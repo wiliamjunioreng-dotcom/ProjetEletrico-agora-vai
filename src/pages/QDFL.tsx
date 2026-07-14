@@ -4,7 +4,7 @@ import { abrirPrancha as abrirPranchaInternal } from '../core/pranchaExport'
 import { useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import {
-  exportarQDFL_XLSX, exportarQDFL_CSV, exportarMemorial, exportarManualUsuario,
+  exportarQDFL_XLSX, exportarQDFL_CSV, exportarMemorial, exportarManualUsuario, exportarPlanoManutencao,
   exportarQDFL_Python, isServerMode
 } from '../core/exporters'
 
@@ -100,6 +100,11 @@ export function QDFL() {
     mostrarMsg('Manual do usuário gerado — NBR 5410 §6.1.8.3', 'info')
   }
 
+  function handlePlanoManutencao() {
+    exportarPlanoManutencao(projeto as any, circuitos_calc)
+    mostrarMsg('Plano de manutenção gerado', 'info')
+  }
+
   function handleSalvar() {
     const json = salvarJSON()
     const blob = new Blob([json], { type: 'application/json' })
@@ -170,6 +175,9 @@ export function QDFL() {
         </button>
         <button className="btn" onClick={handleManualUsuario} title="NBR 5410 §6.1.8.3 — documento para o usuário final da instalação">
           📘 Manual do Usuário
+        </button>
+        <button className="btn" onClick={handlePlanoManutencao} title="Rotina recomendada de manutenção — boa prática geral, não citação normativa específica">
+          🔧 Plano de Manutenção
         </button>
       </div>
     </div>

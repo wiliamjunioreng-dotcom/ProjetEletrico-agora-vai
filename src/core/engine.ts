@@ -110,6 +110,9 @@ export interface CircuitInput {
   du_max: number
   du_ramal: number
   icc_rede_ka?: number
+  // Preset de cliente/escritório — piso adicional acima do normativo,
+  // nunca abaixo (Math.max com o piso da norma sempre aplicado)
+  secao_minima_preset_mm2?: number
   // Resistividade térmica do solo (K.m/W) — só relevante para métodos
   // enterrados D1/D2 (NBR 5410 Tabela 41). Se omitido, assume o padrão
   // normativo 2,5 K.m/W (Fsolo = 1,0, sem correção).
@@ -231,7 +234,12 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
 
   // 5. Seção mínima normativa — Tabela 47 (Cobre: 1,5 ILUM / 2,5 força |
   // Alumínio: piso mecânico único de 16mm² independente do tipo)
-  const sec_min_norma = getSecaoMinima(e.tipo, e.material)
+  const sec_min_norma_base = getSecaoMinima(e.tipo, e.material)
+  // Preset do cliente/escritório só pode SUBIR o piso, nunca descer —
+  // Math.max garante que a norma continua sendo o mínimo absoluto
+  // mesmo que o preset seja menor (ex: preset mal configurado em 1mm²
+  // não enfraquece o piso normativo de 1,5/2,5mm²)
+  const sec_min_norma = Math.max(sec_min_norma_base, e.secao_minima_preset_mm2 ?? 0)
 
   // 6. Seção por Iz
   const sec_iz = getSecaoMinimaPorIz(r.irc, metodo, n_cond, e.material, e.isolacao)

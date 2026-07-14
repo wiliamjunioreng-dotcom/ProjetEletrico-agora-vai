@@ -150,6 +150,9 @@ export interface EntradaCircuito {
   // Só ativa quando os DOIS campos são declarados em método D1/D2.
   readonly tipo_condutor_enterrado?: 'multipolar' | 'unipolar'
   readonly distancia_dutos_m?: number
+  // Preset de cliente/escritório — piso adicional acima do normativo,
+  // nunca abaixo (mesma regra e mesmo campo de engine.ts)
+  readonly secao_minima_preset_mm2?: number
 }
 
 // ── Artefatos intermediários (imutáveis) ──────────────────────────
@@ -338,7 +341,9 @@ export function stageSecao(e: EntradaCircuito, t: ArtTensao, f: ArtFatores): [Ar
   // Consolidado: antes duplicava o mesmo lookup direto de engine.ts,
   // sem cobrir Alumínio — mesmo padrão de risco já corrigido para o
   // K-factor e o PE nesta auditoria.
-  const secao_min_projeto = getSecaoMinima(e.tipo, e.material)
+  const secao_min_projeto_base = getSecaoMinima(e.tipo, e.material)
+  // Preset só pode subir o piso, nunca descer — mesma regra de engine.ts
+  const secao_min_projeto = Math.max(secao_min_projeto_base, e.secao_minima_preset_mm2 ?? 0)
 
   // Decisão: máximo entre física e piso de projeto
   const secao_final = Math.max(secao_por_iz, secao_min_projeto)

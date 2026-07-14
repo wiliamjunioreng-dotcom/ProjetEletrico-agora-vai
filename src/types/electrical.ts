@@ -124,6 +124,12 @@ export interface Projeto {
   t_amb: number
   du_max_pct: number
   du_ramal_pct: number
+  // Preset de cliente/escritório — seção mínima customizada (mm²),
+  // aplicada como PISO ADICIONAL acima do normativo (nunca abaixo).
+  // Ex: "Cliente X exige mínimo 4mm² em toda a instalação, mesmo em
+  // ILUM onde a norma permitiria 1,5mm²" — decisão de projeto, não
+  // enfraquece a norma, só a torna mais conservadora quando desejado.
+  secao_minima_preset_mm2?: number
   aterramento: EsquemaAterramento
   fp_global: number
   icc_rede_ka: number

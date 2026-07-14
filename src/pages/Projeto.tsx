@@ -378,6 +378,17 @@ export function Projeto() {
                 <ErroInline campo="du_ramal_pct" />
               </div>
               <div className="fgroup">
+                <label className="flabel">Preset — seção mínima do cliente/escritório (mm²)</label>
+                <input className="finput" type="number" value={(projeto as any).secao_minima_preset_mm2 ?? ''}
+                  onChange={e => setProjeto({ secao_minima_preset_mm2: e.target.value ? Number(e.target.value) : undefined } as any)}
+                  min={0} step={0.5} placeholder="deixe vazio para usar só o piso da norma" />
+                <div className="fhint">
+                  Opcional — sobe o piso mínimo de TODOS os circuitos acima do normativo
+                  (nunca abaixo). Ex: 4mm² se o cliente/escritório exige robustez extra
+                  mesmo em ILUM. A norma continua sendo respeitada como mínimo absoluto.
+                </div>
+              </div>
+              <div className="fgroup">
                 <label className="flabel">Icc disponível na rede (kA)</label>
                 <input className="finput" type="number" value={projeto.icc_rede_ka}
                   onChange={upd('icc_rede_ka')} min={0.5} max={25} step={0.5}
