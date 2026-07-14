@@ -197,6 +197,9 @@ export interface CargaManual {
   readonly potencia_va: number
   readonly qtd:         number           // multiplicador
   readonly fase:        'mono' | 'bi' | 'tri'
+  // Tipo de carga — usado para inferência de curva do disjuntor
+  // (só relevante quando tipo==='TUE'; ignorado para ILUM/TUG/GERAL)
+  readonly tipo_carga?: 'resistivo' | 'motor' | 'ar_cond' | 'geral'
   // Abaixo do mínimo NBR (alerta mas não bloqueia)
   readonly abaixo_nbr:  boolean
   readonly nbr_min_va:  number

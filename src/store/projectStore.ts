@@ -363,15 +363,75 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // ── Cargas manuais declaradas pelo engenheiro ─────────────────
     // Quando o cômodo possui cargas_manuais[], usá-las diretamente
     // (sobrepõem os valores NBR calculados)
+    //
+    // AGRUPAMENTO POR NATUREZA — cargas de mesma natureza (ILUM entre
+    // si, TUG entre si) dentro do MESMO cômodo compartilham um único
+    // circuito, por economia de cabo. TUE nunca é agrupado — cada TUE
+    // é um circuito dedicado próprio, sempre (chuveiro, motor, ar-
+    // condicionado não devem compartilhar circuito com outra carga).
+    // GERAL também fica 1 circuito por entrada — tipo ambíguo demais
+    // para agrupar com segurança.
     const comodos_com_cargas = comodos.filter(c => c.cargas_manuais?.length)
     for (const co of comodos_com_cargas) {
-      for (const cm of co.cargas_manuais) {
+      const ilumEntries = co.cargas_manuais.filter(cm => cm.tipo === 'ILUM')
+      const tugEntries  = co.cargas_manuais.filter(cm => cm.tipo === 'TUG')
+      const outrasEntries = co.cargas_manuais.filter(cm => cm.tipo !== 'ILUM' && cm.tipo !== 'TUG')
+
+      // Helper: agrupa uma lista de cargas do MESMO tipo num único
+      // circuito por natureza (respeitando o limite de 800VA — mesmo
+      // teto usado no agrupamento automático de ILUM). A ligação/fase
+      // final é a do PRIMEIRO item com maior exigência (tri > bi > mono)
+      // — se qualquer carga do grupo precisar de mais fases, o circuito
+      // inteiro precisa delas.
+      function agruparPorNatureza(entries: typeof ilumEntries, tipoLabel: string) {
+        if (entries.length === 0) return
+        let grupo: typeof entries = []
+        let grupoVA = 0
+        const flush = () => {
+          if (grupo.length === 0) return
+          const precisaTri = grupo.some(g => g.fase === 'tri')
+          const precisaBi  = grupo.some(g => g.fase === 'bi')
+          const ligacao: TipoLigacao = precisaTri ? 'trifasica' : precisaBi ? 'bifasica' : 'monofasica'
+          const fasesDisp = fasesParaTipo(ligacao, projeto.sistema)
+          const descricoes = grupo.map(g => g.descricao || tipoLabel).join(', ')
+          circs.push({
+            id: crypto.randomUUID(),
+            descricao: `${tipoLabel}: ${descricoes} (${co.nome})`,
+            potencia_va: grupoVA,
+            fase: fasesDisp[fi++ % fasesDisp.length],
+            ligacao,
+            tipo: tipoLabel as 'ILUM' | 'TUG',
+            comodo_id: co.id,
+            comprimento_m: comprimentoEstimado(co.tipo, tipoLabel as 'ILUM'|'TUG'),
+            n_agrup: 1,
+            abaixo_minimo_nbr: grupo.some(g => g.abaixo_nbr),
+            minimo_nbr_va: grupo.reduce((s, g) => s + g.nbr_min_va, 0),
+          })
+          grupo = []; grupoVA = 0
+        }
+        entries.forEach(cm => {
+          const pot = cm.potencia_va * cm.qtd
+          if (grupoVA + pot > 800) flush()
+          grupo.push(cm); grupoVA += pot
+        })
+        flush()
+      }
+
+      agruparPorNatureza(ilumEntries, 'ILUM')
+      agruparPorNatureza(tugEntries, 'TUG')
+
+      // TUE e GERAL — cada entrada É seu próprio circuito, sempre
+      for (const cm of outrasEntries) {
         const pot = cm.potencia_va * cm.qtd
         const ligacao = cm.fase === 'tri' ? 'trifasica' : cm.fase === 'bi' ? 'bifasica' : 'monofasica'
         const fasesDisp = fasesParaTipo(ligacao as TipoLigacao, projeto.sistema)
+        // Anexar tipo_carga à descrição como palavra-chave para inferirCurva()
+        // reconhecer corretamente (motor→D, resistivo→B, etc.)
+        const sufixoTipo = cm.tipo === 'TUE' && cm.tipo_carga && cm.tipo_carga !== 'geral'
+          ? ` (${cm.tipo_carga})` : ''
         circs.push({
           id: crypto.randomUUID(),
-          descricao: cm.descricao || `${cm.tipo}: ${co.nome}`,
+          descricao: (cm.descricao || `${cm.tipo}: ${co.nome}`) + sufixoTipo,
           potencia_va: pot,
           fase: fasesDisp[fi++ % fasesDisp.length],
           ligacao: ligacao as TipoLigacao,

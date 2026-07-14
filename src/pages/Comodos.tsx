@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import { verificarComodoNBR9 } from '../core/rules/nbr5410_s9'
 import { useProjectStore } from '../store/projectStore'
-import type { Comodo, TUE, FaseType } from '../types/electrical'
+import type { Comodo } from '../types/electrical'
 import { CATALOGO_LUMINARIAS, ILUMINANCIAS_REF, calcularLumens } from '../core/luminotecnico'
 import type { LampadaReal } from '../store/projectStore'
 import { calcIlumComodo, calcTugComodo } from '../core/engine'
@@ -168,16 +168,12 @@ interface Form {
   tug_modo:  'auto' | 'manual' | 'tomadas'
   tug_manual: string
   // TUE
-  tue_d: string; tue_v: string
-  tue_fase: 'mono' | 'bi' | 'tri'  // ligação elétrica
-  tue_tipo: 'resistivo' | 'motor' | 'ar_cond' | 'geral'  // tipo para inferência de curva
 }
 
 const EMPTY: Form = {
   nome: '', tipo: 'Social', area: '', perim: '', afluencia_publico: false, grupo_circuito_ilum: '',
   ilum_modo: 'auto', ilum_manual: '', ilum_string: '',
   tug_modo:  'auto', tug_manual: '',
-  tue_d: '', tue_v: '', tue_fase: 'mono' as const, tue_tipo: 'geral' as const,
 }
 
 interface TomadaItem { id: string; desc: string; qtd: number; va_unit: number; va_custom?: number }
@@ -271,11 +267,11 @@ export function Comodos() {
   const [formCarga, setFormCarga] = useState({
     tipo: 'TUG' as 'ILUM'|'TUG'|'TUE'|'GERAL',
     descricao: '', potencia_va: 100, qtd: 1, fase: 'mono' as 'mono'|'bi'|'tri',
+    tipo_carga: 'geral' as 'resistivo'|'motor'|'ar_cond'|'geral',
     distancia_box_m: '' as string | number,
   })
   const [lumModalComodo, setLumModalComodo] = useState<string | null>(null)
   const [form,     setForm]     = useState<Form>(EMPTY)
-  const [tues,     setTues]     = useState<TUE[]>([])
   const [lampadas, setLampadas] = useState<LampadaReal[]>([])
   const [tomadas,  setTomadas]  = useState<TomadaItem[]>([])
   const [erros,    setErros]    = useState<Partial<Record<keyof Form, string>>>({})
@@ -337,8 +333,7 @@ export function Comodos() {
   : form.tug_modo === 'manual'  && tugManual > 0  ? tugManual
   : tugNBR
 
-  const tueTotalP = tues.reduce((s, t) => s + t.potencia_va, 0)
-  const totalCard = ilumEfetiva + tugEfetiva + tueTotalP
+  const totalCard = ilumEfetiva + tugEfetiva
 
   // Alertas de vigia normativo
   const ilumAbaixo = ilumEfetiva < ilumNBR && ilumNBR > 0
@@ -347,7 +342,12 @@ export function Comodos() {
   // KPIs totais
   const totalIlum = comodos.reduce((s, c) => s + c.ilum_va, 0)
   const totalTug  = comodos.reduce((s, c) => s + c.tug_va, 0)
-  const totalTue  = comodos.reduce((s, c) => s + c.tues.reduce((ss, t) => ss + t.potencia_va, 0), 0)
+  // Soma TUE de AMBAS as fontes — array legado c.tues[] (rooms antigos/
+  // importados) e cargas_manuais tipo='TUE' (caminho unificado atual)
+  const totalTue  = comodos.reduce((s, c) =>
+    s + c.tues.reduce((ss, t) => ss + t.potencia_va, 0)
+      + c.cargas_manuais.filter(cm => cm.tipo === 'TUE').reduce((ss, cm) => ss + cm.potencia_va * cm.qtd, 0)
+  , 0)
   const totalKW   = (totalIlum + totalTug + totalTue) / 1000
 
   // Helpers
@@ -398,25 +398,6 @@ export function Comodos() {
     setTomQtd(''); setTomVAcust('')
   }
 
-  function addTue() {
-    const d = form.tue_d.trim()
-    const v = parseFloat(form.tue_v) || 0
-    if (!d || v <= 0) return
-    // Fase sugerida: respeita a seleção do engenheiro (form.tue_fase)
-    // quando informada; cai para heurística por potência só como fallback
-    const fase_sugerida: FaseType =
-      form.tue_fase === 'tri' ? 'RST' :
-      form.tue_fase === 'bi'  ? 'RS'  :
-      v >= 4000 ? 'RS' : 'R'
-    setTues(prev => [...prev, {
-      id: crypto.randomUUID(), descricao: d, potencia_va: v,
-      fase_sugerida,
-      fase_ligacao: form.tue_fase,
-      tipo_carga:   form.tue_tipo,
-    }])
-    setForm(f => ({ ...f, tue_d: '', tue_v: '' }))
-  }
-
   function adicionar() {
     const e: Partial<Record<keyof Form, string>> = {}
     if (!form.nome.trim()) e.nome  = 'Obrigatório'
@@ -433,7 +414,7 @@ export function Comodos() {
       pe_direito_m: 2.8,
       afluencia_publico: form.afluencia_publico,
       grupo_circuito_ilum: form.grupo_circuito_ilum.trim() || undefined,
-      tues,
+      tues: [],  // TUEs agora adicionados via cargas_manuais após criação
       // Passar os valores calculados explicitamente — o store vai respeitá-los
       ilum_va:      ilumEfetiva,
       tug_va:       tugEfetiva,
@@ -445,7 +426,7 @@ export function Comodos() {
       } : undefined,
     } as any)
 
-    setForm(EMPTY); setTues([]); setLampadas([]); setTomadas([])
+    setForm(EMPTY); setLampadas([]); setTomadas([])
   }
 
   // Modos de entrada de iluminação
@@ -888,44 +869,16 @@ export function Comodos() {
             )}
           </div>
 
-          {/* ── TUEs ──────────────────────────────────────────── */}
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-            <div className="flabel" style={{ marginBottom: 6 }}>⚡ TUEs — uso específico</div>
-            <div style={{ display: 'flex', gap: 5 }}>
-              <input className="finput" value={form.tue_d} onChange={upd('tue_d')}
-                placeholder="Ex: Motor 3cv, Chuveiro 5500W" style={{ flex: 1, minWidth: 0 }} />
-              <input className="finput" type="number" value={form.tue_v} onChange={updNumPositivo('tue_v')}
-                placeholder="VA" style={{ width: 66, flexShrink: 0 }} min={0} step={100} />
-              <select className="fselect" value={form.tue_fase}
-                onChange={e => setForm(f => ({ ...f, tue_fase: e.target.value as any }))}
-                style={{ width: 58, flexShrink: 0, fontSize: 11 }}
-                title="Ligação elétrica">
-                <option value="mono">1F</option>
-                <option value="bi">2F</option>
-                <option value="tri">3F</option>
-              </select>
-              <select className="fselect" value={form.tue_tipo}
-                onChange={e => setForm(f => ({ ...f, tue_tipo: e.target.value as any }))}
-                style={{ width: 72, flexShrink: 0, fontSize: 11 }}
-                title="Tipo de carga">
-                <option value="geral">Geral</option>
-                <option value="resistivo">Resist.</option>
-                <option value="motor">Motor</option>
-                <option value="ar_cond">A/C</option>
-              </select>
-              <button className="btn" onClick={addTue} style={{ flexShrink: 0, padding: '0 10px' }}>+</button>
+          {/* TUEs (chuveiro, motor, ar-condicionado...) são adicionados
+              DEPOIS que o cômodo é criado, pelo formulário único de carga
+              manual abaixo na lista de cômodos — mesmo caminho de ILUM/TUG,
+              sem sistema separado. */}
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
+            <div style={{ fontSize: 10.5, color: 'var(--text4)', lineHeight: 1.4 }}>
+              💡 TUEs (chuveiro, motor, ar-condicionado...) são adicionados depois de
+              criar o cômodo, no card dele na lista — mesmo formulário usado para
+              ILUM e TUG manuais, com campo de fase e tipo de carga.
             </div>
-            {tues.map((t, i) => (
-              <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 8px', background: 'var(--surface2)', borderRadius: 5, fontSize: 11, marginTop: 3 }}>
-                <span>{t.descricao}</span>
-                <span style={{ color: 'var(--text4)', fontSize: 10, margin: '0 4px' }}>
-                  {(t as any).fase_ligacao === 'tri' ? '3F' : (t as any).fase_ligacao === 'bi' ? '2F' : '1F'}
-                </span>
-                <span style={{ color: 'var(--amber)', fontWeight: 600, margin: '0 4px' }}>{t.potencia_va}VA</span>
-                <button onClick={() => setTues(p => p.filter((_, j) => j !== i))}
-                  style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 16 }}>×</button>
-              </div>
-            ))}
           </div>
 
           {/* Preview */}
@@ -936,7 +889,6 @@ export function Comodos() {
                 ['ILUM (dim.)', `${ilumEfetiva}VA`, ilumAbaixo ? 'var(--amber)' : 'var(--green)'],
                 ...(potRealIlum > 0 ? [['ILUM (real)', `${potRealIlum}W`, '#16a34a']] : []),
                 ['TUG (dim.)', `${tugEfetiva}VA`, tugAbaixo ? 'var(--amber)' : 'var(--blue)'],
-                ...(tueTotalP > 0 ? [['TUEs', `${tueTotalP}VA`, 'var(--amber)']] : []),
                 ['TOTAL dim.', `${totalCard}VA`, 'var(--text)'],
               ].map(([k, v, col]) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', borderBottom: '1px solid var(--blue-line)' }}>
@@ -1120,9 +1072,10 @@ export function Comodos() {
                     )}
                   </div>
                 )}
-                <div style={{ display:'grid', gridTemplateColumns:'56px 1fr 64px 36px 36px auto', gap:4, alignItems:'end', marginTop:6 }}>
+                <div style={{ display:'grid', gridTemplateColumns: formCarga.tipo === 'TUE' ? '56px 1fr 64px 36px 36px 64px auto' : '56px 1fr 64px 36px 36px auto', gap:4, alignItems:'end', marginTop:6 }}>
                   <select value={formCarga.tipo}
                     onChange={e => setFormCarga(f => ({ ...f, tipo: e.target.value as any }))}
+                    title="Tipo de carga: ILUM/TUG são agrupáveis com outras do mesmo tipo; cada TUE vira seu próprio circuito dedicado"
                     style={{ fontSize:10, padding:'3px 4px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:4 }}>
                     <option value="ILUM">ILUM</option><option value="TUG">TUG</option>
                     <option value="TUE">TUE</option><option value="GERAL">Geral</option>
@@ -1140,9 +1093,21 @@ export function Comodos() {
                     style={{ fontSize:10, textAlign:'center' }} />
                   <select value={formCarga.fase}
                     onChange={e => setFormCarga(f => ({ ...f, fase: e.target.value as any }))}
+                    title="Ligação elétrica — define quantas fases o circuito usa (bifásico = 2 fases, sem neutro)"
                     style={{ fontSize:10, padding:'3px 2px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:4 }}>
                     <option value="mono">1φ</option><option value="bi">2φ</option><option value="tri">3φ</option>
                   </select>
+                  {formCarga.tipo === 'TUE' && (
+                    <select value={formCarga.tipo_carga}
+                      onChange={e => setFormCarga(f => ({ ...f, tipo_carga: e.target.value as any }))}
+                      title="Tipo de carga — define a curva do disjuntor (motor exige curva D, resistivo curva B)"
+                      style={{ fontSize:9.5, padding:'3px 2px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:4 }}>
+                      <option value="geral">Geral</option>
+                      <option value="resistivo">Resist.</option>
+                      <option value="motor">Motor</option>
+                      <option value="ar_cond">A/C</option>
+                    </select>
+                  )}
                   <button className="btn primary" style={{ height:26, fontSize:10, padding:'0 6px' }}
                     onClick={() => {
                       const nbr = formCarga.tipo === 'ILUM' ? c.ilum_va : formCarga.tipo === 'TUG' ? c.tug_va : 0
@@ -1150,12 +1115,18 @@ export function Comodos() {
                         tipo: formCarga.tipo, descricao: formCarga.descricao || `${formCarga.tipo} ${c.nome}`,
                         potencia_va: formCarga.potencia_va, qtd: formCarga.qtd, fase: formCarga.fase,
                         abaixo_nbr: formCarga.potencia_va * formCarga.qtd < nbr, nbr_min_va: nbr,
+                        ...(formCarga.tipo === 'TUE' ? { tipo_carga: formCarga.tipo_carga } : {}),
                         ...(c.tipo === 'Banho' && typeof formCarga.distancia_box_m === 'number'
                               ? { distancia_box_m: formCarga.distancia_box_m } : {}),
                       })
                       setFormCarga(f => ({ ...f, descricao:'', potencia_va:100, qtd:1, distancia_box_m:'' }))
                     }}>+</button>
                 </div>
+                {formCarga.tipo === 'TUE' && (
+                  <div style={{ fontSize: 9.5, color: 'var(--text4)', marginTop: 3 }}>
+                    💡 Cada TUE vira seu próprio circuito dedicado — não é agrupado com outras cargas.
+                  </div>
+                )}
               </div>
             </div>
           )
