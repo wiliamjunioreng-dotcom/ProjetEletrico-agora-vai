@@ -5,7 +5,7 @@ import { comprimentoMaximo } from './minFaultCurrentAnalysis'
 // Convergência iterativa explícita — seção→dU→seção
 
 import {
-  getFt, getFa, getIz, getSecaoMinimaPorIz,
+  getFt, getFa, getIz, getSecaoMinimaPorIz, getSecaoPE,
   getDisjuntor, getIDR, SECAO_MINIMA, SECOES_COMERCIAIS,
 } from '../data/nbr5410tables'
 import { validarCircuito } from './rules/index'
@@ -452,8 +452,12 @@ export function stageProtecao(
   }
 
   // PE — NBR 5410:2004 Tabela 54 (usa a seção JÁ corrigida pela tripartida)
-  const sec_pe  = secao_protegida <= 16 ? secao_protegida
-                : secao_protegida <= 35 ? 16 : secao_protegida / 2
+  // Reutiliza getSecaoPE() (fonte única em nbr5410tables.ts) em vez de
+  // duplicar a fórmula inline pela 2ª vez (engine.ts já usava a função;
+  // esta era uma cópia paralela — mesmo padrão de risco do K-factor
+  // corrigido anteriormente, aqui os valores já batiam, mas o risco
+  // de divergência futura existia).
+  const sec_pe  = getSecaoPE(secao_protegida)
   const sec_neu = secao_protegida  // neutro = fase (circuitos terminais)
 
   tb.decisao('in_disj', in_disj,

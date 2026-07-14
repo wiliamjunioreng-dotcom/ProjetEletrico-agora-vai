@@ -149,6 +149,31 @@ export function getFsolo(resistividade_km_w: number, metodo: MetodoInstalacao): 
   return 1.0
 }
 
+// ── §6.2.5.6.1 — Fator de correção por harmônicas de 3ª ordem ────
+// Circuitos trifásicos com neutro (fase RST) alimentando carga
+// concentrada de eletrônica/LED podem ter 3ª harmônica alta o
+// suficiente para o neutro carregar corrente comparável às fases
+// (as harmônicas de ordem 3 e múltiplas NÃO se cancelam no neutro
+// como as componentes fundamentais fariam — elas se somam).
+//
+// Citação direta do texto da norma (item 6.2.5.6.1):
+// "Tal fator, que em caráter geral é de 0,86, independentemente do
+// método de instalação, é aplicável então às capacidades de condução
+// de corrente válidas para três condutores carregados."
+//
+// Gatilho: taxa de 3ª harmônica > 15% — DECLARADA pelo engenheiro
+// (não medida automaticamente; o sistema não tem instrumentação para
+// isso). Aplica-se multiplicando Iz efetiva por 0,86 quando ativo.
+export const LIMITE_3H_PCT = 15
+export const FATOR_3H = 0.86
+
+export function getFatorHarmonica(terceira_harmonica_pct: number | undefined, fase: string): number {
+  if (terceira_harmonica_pct === undefined) return 1.0
+  if (fase !== 'RST') return 1.0  // regra é para trifásico com neutro
+  if (terceira_harmonica_pct <= LIMITE_3H_PCT) return 1.0
+  return FATOR_3H
+}
+
 // ── Tabela 54 — Seção do PE ──────────────────────────────────────
 export function getSecaoPE(secao_fase: number): number {
   if (secao_fase <= 16) return secao_fase

@@ -4,7 +4,7 @@ import { inferirCurva, FATOR_K } from './protectionDevicePhysics'
 // Motor de cálculo elétrico — física pura + auditoria normativa
 
 import {
-  getIz, getFt, getFa, getFsolo, getSecaoPE, getSecaoMinimaPorIz,
+  getIz, getFt, getFa, getFsolo, getFatorHarmonica, getSecaoPE, getSecaoMinimaPorIz,
   getDisjuntor, getIDR, SECAO_MINIMA, getFatorDemandaCEMIG,
   getReservasQD, getTamanhoQD, getTipoLigacaoCEMIG, POT_TOMADA
 } from '../data/nbr5410tables'
@@ -114,6 +114,11 @@ export interface CircuitInput {
   // enterrados D1/D2 (NBR 5410 Tabela 41). Se omitido, assume o padrão
   // normativo 2,5 K.m/W (Fsolo = 1,0, sem correção).
   resistividade_solo_km_w?: number
+  // Taxa de 3ª harmônica (%) — §6.2.5.6.1. Só relevante para circuitos
+  // trifásicos com neutro (fase RST) alimentando carga concentrada de
+  // eletrônica/LED. DECLARADA pelo engenheiro; acima de 15%, aplica
+  // fator 0,86 sobre Iz efetiva. Se omitido, sem correção.
+  terceira_harmonica_pct?: number
   // Override do engenheiro (decisão travada, sistema respeita)
   override_secao_mm2?: number
   override_in_disj?: number
@@ -195,6 +200,8 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
   // para métodos enterrados (D1/D2); retorna 1.0 para os demais e
   // quando não informado (assume padrão normativo 2,5 K.m/W)
   const fsolo = getFsolo(e.resistividade_solo_km_w ?? 2.5, e.metodo as any)
+  // §6.2.5.6.1 — fator 0,86 quando 3ª harmônica > 15% em trifásico c/ neutro
+  const fHarmonica = getFatorHarmonica(e.terceira_harmonica_pct, e.fase)
   // Fs NÃO é usado para dimensionar o cabo — só para previsão de carga total
   // O cabo deve suportar a corrente máxima do circuito (NBR 5410 item 6.2.1)
   r.fs = 1.0
@@ -228,7 +235,7 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
   r.secao_neutro = sec
   r.secao_pe     = getSecaoPE(sec)
   r.iz_nominal   = getIz(sec, metodo, n_cond, e.material, e.isolacao)
-  r.iz_efetiva   = r.iz_nominal * r.ft * r.fa * fsolo
+  r.iz_efetiva   = r.iz_nominal * r.ft * r.fa * fsolo * fHarmonica
 
   // 8. Disjuntor
   r.in_disj = getDisjuntor(r.ib_corr)
@@ -250,7 +257,7 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
       r.secao_neutro = sec
       r.secao_pe     = getSecaoPE(sec)
       r.iz_nominal   = getIz(sec, metodo, n_cond, e.material, e.isolacao)
-      r.iz_efetiva   = r.iz_nominal * r.ft * r.fa * fsolo
+      r.iz_efetiva   = r.iz_nominal * r.ft * r.fa * fsolo * fHarmonica
       tentativas++
     }
   }
