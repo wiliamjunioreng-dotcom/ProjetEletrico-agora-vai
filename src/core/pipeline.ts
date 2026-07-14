@@ -5,7 +5,7 @@ import { comprimentoMaximo } from './minFaultCurrentAnalysis'
 // Convergência iterativa explícita — seção→dU→seção
 
 import {
-  getFt, getFa, getIz, getSecaoMinimaPorIz, getSecaoPE,
+  getFt, getFa, getFaEnterrado, getFsolo, getFatorHarmonica, getIz, getSecaoMinimaPorIz, getSecaoPE,
   getDisjuntor, getIDR, getSecaoMinima, SECOES_COMERCIAIS,
 } from '../data/nbr5410tables'
 import { validarCircuito } from './rules/index'
@@ -140,6 +140,16 @@ export interface EntradaCircuito {
   // terminal. Quando ausente, assume v_fase × √3 (convenção trifásica
   // padrão da maioria dos padrões de entrada CEMIG).
   readonly v_linha_ref?:   number
+  // Tabela 41 — resistividade térmica do solo (K.m/W), só relevante
+  // para métodos enterrados D1/D2. Omitido = padrão 2,5 K.m/W (Fsolo=1,0).
+  readonly resistividade_solo_km_w?: number
+  // §6.2.5.6.1 — taxa de 3ª harmônica (%), só relevante para trifásico
+  // com neutro (fase RST) alimentando carga concentrada de eletrônica/LED.
+  readonly terceira_harmonica_pct?: number
+  // Tabela 45 — dutos enterrados SEPARADOS (não Tabela 42/mesmo duto).
+  // Só ativa quando os DOIS campos são declarados em método D1/D2.
+  readonly tipo_condutor_enterrado?: 'multipolar' | 'unipolar'
+  readonly distancia_dutos_m?: number
 }
 
 // ── Artefatos intermediários (imutáveis) ──────────────────────────
@@ -251,7 +261,27 @@ export function stageCorrente(e: EntradaCircuito, t: ArtTensao): [ArtCorrente, T
 export function stageFatores(e: EntradaCircuito, c: ArtCorrente): [ArtFatores, TracoEstagio] {
   const tb  = new TraceBuilder('stageFatores', 3)
   const ft  = getFt(e.t_amb, e.isolacao)
-  const fa  = getFa(e.n_agrup)
+
+  // Fa base: Tabela 42 (agrupamento no mesmo duto) por padrão; Tabela 45
+  // (dutos enterrados separados) quando ambos os campos são declarados
+  // em método D1/D2 — mesma lógica condicional de engine.ts, replicada
+  // aqui para os dois motores nunca divergirem no mesmo circuito.
+  const metodoEnterrado = e.metodo === 'D1' || e.metodo === 'D2'
+  const usaTabela45 = metodoEnterrado && e.tipo_condutor_enterrado !== undefined && e.distancia_dutos_m !== undefined
+  const faBase = usaTabela45
+    ? getFaEnterrado(e.tipo_condutor_enterrado!, e.n_agrup, e.distancia_dutos_m!)
+    : getFa(e.n_agrup)
+
+  // Fsolo (Tabela 41) e fator harmônico (§6.2.5.6.1) são multiplicadores
+  // adicionais da MESMA natureza de Fa (reduzem a capacidade efetiva do
+  // cabo) — dobrados no valor retornado de 'fa' para que todo cálculo
+  // downstream que já multiplica por f.fa receba a correção automaticamente,
+  // sem precisar tocar em 3 pontos diferentes do pipeline (como acontecia
+  // em engine.ts). Cada fator é registrado separadamente no trace.
+  const fsolo = getFsolo(e.resistividade_solo_km_w ?? 2.5, e.metodo as any)
+  const fHarmonica = getFatorHarmonica(e.terceira_harmonica_pct, e.fase)
+  const fa = Math.round(faBase * fsolo * fHarmonica * 1000) / 1000
+
   const div = ft * fa
   const irc = div > 0 ? Math.round(c.ib / div * 100) / 100 : c.ib
 
@@ -259,10 +289,31 @@ export function stageFatores(e: EntradaCircuito, c: ArtCorrente): [ArtFatores, T
     { t_amb: e.t_amb, isolacao: e.isolacao },
     { norma: 'NBR 5410:2004 Tabela 40', categoria: 'norma',
       nota: `Fator temperatura — Iz' = Iz × Ft — redução de ${Math.round((1-ft)*100)}%` }
-  ).entrada('fa', fa,
-    { n_agrup: e.n_agrup },
-    { norma: 'NBR 5410:2004 Tabela 42', categoria: 'norma',
-      nota: `Fator agrupamento — ${e.n_agrup} circuito(s) no mesmo eletroduto` }
+  ).entrada('fa_base', faBase,
+    { n_agrup: e.n_agrup, tabela: usaTabela45 ? '45 (enterrado)' : '42 (agrupado)' },
+    { norma: usaTabela45 ? 'NBR 5410:2004 Tabela 45' : 'NBR 5410:2004 Tabela 42', categoria: 'norma',
+      nota: usaTabela45
+        ? `Dutos enterrados separados — ${e.tipo_condutor_enterrado}, ${e.distancia_dutos_m}m`
+        : `Fator agrupamento — ${e.n_agrup} circuito(s) no mesmo eletroduto` }
+  )
+  if (fsolo !== 1.0) {
+    tb.entrada('fsolo', fsolo,
+      { resistividade_solo_km_w: e.resistividade_solo_km_w ?? 0 },
+      { norma: 'NBR 5410:2004 Tabela 41', categoria: 'norma',
+        nota: `Resistividade térmica do solo — correção de ${Math.round((fsolo-1)*100)}%` }
+    )
+  }
+  if (fHarmonica !== 1.0) {
+    tb.entrada('fator_harmonica', fHarmonica,
+      { terceira_harmonica_pct: e.terceira_harmonica_pct ?? 0 },
+      { norma: 'NBR 5410:2004 §6.2.5.6.1', categoria: 'norma',
+        nota: `3ª harmônica > ${e.terceira_harmonica_pct}% — fator 0,86 aplicado` }
+    )
+  }
+  tb.entrada('fa', fa,
+    { faBase, fsolo, fHarmonica },
+    { formula: 'fa = fa_base × fsolo × fator_harmonica', categoria: 'fisica',
+      nota: 'Fator de agrupamento efetivo final, já com todas as correções aplicáveis' }
   ).entrada('irc', irc,
     { ib: c.ib, ft, fa },
     { formula: 'Irc = Ib / (Ft × Fa)', unidade: 'A', categoria: 'fisica',
