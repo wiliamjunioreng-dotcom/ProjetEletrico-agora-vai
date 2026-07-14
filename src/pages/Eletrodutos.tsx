@@ -3,10 +3,11 @@
 import { useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import type {
-  NoTopologico, SegmentoEletroduto,
+  SegmentoEletroduto,
   TipoNo, TipoCondutor,
 } from '../types/electrical'
 import { validarRede, MODELOS_COMANDO } from '../core/topologia'
+import { EletrodutosCanvas } from './EletrodutosCanvas'
 import { getDiametroExterno, AREA_INTERNA_ELETRODUTO } from '../data/nbr5410tables'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -72,75 +73,134 @@ function SecaoTransversal({ taxa, diametro }: { taxa: number; diametro: number }
 }
 
 // ── Diagrama de nós e segmentos ────────────────────────────────────
-function DiagramaRede({ nos, segmentos }: {
-  nos: NoTopologico[]
-  segmentos: SegmentoEletroduto[]
+// ── Painel de detalhe do segmento selecionado (modo canvas) ──────
+function PainelSegmento({ seg, circuitos, onUpdate, onRemove, onFechar }: {
+  seg: SegmentoEletroduto
+  circuitos: { id: string; numero: number; nome: string }[]
+  onUpdate: (partial: Partial<Omit<SegmentoEletroduto, 'id'>>) => void
+  onRemove: () => void
+  onFechar: () => void
 }) {
-  if (nos.length === 0) return (
-    <div style={{ padding: 24, textAlign: 'center', color: 'var(--text4)', fontSize: 11 }}>
-      Adicione nós para visualizar a rede.
-    </div>
-  )
+  const [condTipo, setCondTipo] = useState<TipoCondutor>('FASE_A')
+  const [condSecao, setCondSecao] = useState('2.5')
+  const [condCirc, setCondCirc] = useState('')
+
+  function addCondutor() {
+    onUpdate({
+      condutores: [...seg.condutores, {
+        tipo: condTipo, secao_mm2: parseFloat(condSecao) || 2.5,
+        circuito_id: condCirc, corrente_a: 0,
+      }],
+    })
+  }
+  function removeCondutor(i: number) {
+    onUpdate({ condutores: seg.condutores.filter((_, j) => j !== i) })
+  }
+
+  const analise = seg.analise
+  const statusCor = analise?.status_ocupacao === 'EXCEDIDO' ? 'var(--red)'
+    : analise?.status_ocupacao === 'LIMITE' ? 'var(--amber)' : 'var(--green)'
 
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <svg width={Math.max(600, nos.length * 120)} height={200}
-        viewBox={`0 0 ${Math.max(600, nos.length * 120)} 200`}
-        style={{ display: 'block', fontFamily: 'monospace', background: 'var(--surface2)', borderRadius: 4 }}>
+    <div className="card" style={{ position: 'sticky', top: 8 }}>
+      <div className="card-header">
+        {seg.nome}
+        <button className="btn ghost icon" onClick={onFechar} style={{ marginLeft: 'auto' }}>✕</button>
+      </div>
+      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {analise && (
+          <div style={{ display: 'flex', gap: 10, fontSize: 11 }}>
+            <span style={{ color: statusCor, fontWeight: 700 }}>
+              {analise.taxa_ocupacao_pct}% ocup. (limite {analise.limite_ocupacao_pct}%)
+            </span>
+            <span style={{ color: 'var(--text4)' }}>Fa={analise.fa_resultante}</span>
+          </div>
+        )}
 
-        {/* Segmentos (arestas) */}
-        {segmentos.map(seg => {
-          const nO = nos.findIndex(n => n.id === seg.origem_no_id)
-          const nD = nos.findIndex(n => n.id === seg.destino_no_id)
-          if (nO < 0 || nD < 0) return null
-          const x1 = 60 + nO * 120, y1 = 100
-          const x2 = 60 + nD * 120, y2 = 100
-          const analise = seg.analise
-          const cor = !analise ? 'var(--border2)'
-            : analise.status_ocupacao === 'OK' ? 'var(--green)'
-            : analise.status_ocupacao === 'LIMITE' ? 'var(--amber)' : 'var(--red)'
-          return (
-            <g key={seg.id}>
-              <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={cor} strokeWidth={3} />
-              <text x={(x1+x2)/2} y={y1-10} textAnchor="middle" fontSize={8}
-                fill="var(--text4)">{seg.nome}</text>
-              <text x={(x1+x2)/2} y={y1-2} textAnchor="middle" fontSize={7.5}
-                fill={cor}>{seg.comprimento_m}m · ⌀{seg.diametro_mm}</text>
-              {analise && (
-                <text x={(x1+x2)/2} y={y1+12} textAnchor="middle" fontSize={7.5}
-                  fill={cor}>{analise.taxa_ocupacao_pct}% ocup. · Fa={analise.fa_resultante}</text>
-              )}
-            </g>
-          )
-        })}
+        <div className="form-grid c2">
+          <div className="fgroup">
+            <label className="flabel">Comprimento (m)</label>
+            <input className="finput" type="number" value={seg.comprimento_m}
+              onChange={e => onUpdate({ comprimento_m: parseFloat(e.target.value) || 0 })} />
+          </div>
+          <div className="fgroup">
+            <label className="flabel">Diâmetro</label>
+            <select className="fselect" value={seg.diametro_mm}
+              onChange={e => onUpdate({ diametro_mm: parseInt(e.target.value) as any })}>
+              {DIAMETROS_NOMINAL.map(d => <option key={d} value={d}>⌀{d}mm</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="fgroup">
+          <label className="flabel">Material</label>
+          <select className="fselect" value={seg.material}
+            onChange={e => onUpdate({ material: e.target.value as any })}>
+            {MATERIAIS_ELETRODUTO.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select>
+        </div>
+        <div className="fgroup">
+          <label className="flabel" title="NBR 5410 §6.2.11.3 — máx. 3 curvas (270°) entre caixas">
+            Curvas de 90° neste trecho
+          </label>
+          <input className="finput" type="number" value={seg.n_curvas_90 || ''}
+            onChange={e => onUpdate({ n_curvas_90: parseInt(e.target.value) || 0 })}
+            min={0} max={10} />
+        </div>
 
-        {/* Nós */}
-        {nos.map((no, i) => {
-          const x = 60 + i * 120, y = 100
-          const isQD = no.tipo === 'QD'
-          return (
-            <g key={no.id}>
-              <circle cx={x} cy={y} r={isQD ? 18 : 12}
-                fill={isQD ? 'var(--blue)' : 'var(--surface)'}
-                stroke={isQD ? 'var(--blue-dark)' : 'var(--border2)'}
-                strokeWidth={isQD ? 2 : 1.5} />
-              <text x={x} y={y+4} textAnchor="middle" fontSize={isQD ? 10 : 8}
-                fill={isQD ? '#fff' : 'var(--text3)'}>{TIPO_NO_ICON[no.tipo]}</text>
-              <text x={x} y={y+28} textAnchor="middle" fontSize={8}
-                fill="var(--text)">{no.nome}</text>
-              <text x={x} y={y+38} textAnchor="middle" fontSize={7}
-                fill="var(--text4)">{TIPO_NO_LABEL[no.tipo]}</text>
-            </g>
-          )
-        })}
-      </svg>
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+          <div className="flabel" style={{ marginBottom: 6 }}>Condutores (a fiação que passa aqui)</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 56px auto', gap: 5, alignItems: 'end' }}>
+            <select className="fselect" style={{ height: 30, fontSize: 11 }}
+              value={condTipo} onChange={e => setCondTipo(e.target.value as TipoCondutor)}>
+              {TIPOS_CONDUTOR.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+            <input className="finput" style={{ height: 30, fontSize: 11 }} type="number"
+              value={condSecao} onChange={e => setCondSecao(e.target.value)} min={1} step={0.5} />
+            <button className="btn primary" style={{ height: 30, padding: '0 10px' }} onClick={addCondutor}>+</button>
+          </div>
+          <select className="fselect" style={{ marginTop: 5, height: 28, fontSize: 11 }}
+            value={condCirc} onChange={e => setCondCirc(e.target.value)}>
+            <option value="">Circuito — nenhum vinculado</option>
+            {circuitos.map(ci => (
+              <option key={ci.id} value={ci.id}>C{String(ci.numero).padStart(2,'0')} {ci.nome.slice(0,20)}</option>
+            ))}
+          </select>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 8 }}>
+            {seg.condutores.map((cd, i) => {
+              const info = TIPOS_CONDUTOR.find(t => t.id === cd.tipo)
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
+                  padding: '4px 8px', background: 'var(--surface2)', borderRadius: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: info?.cor, flexShrink: 0 }} />
+                  <span style={{ flex: 1 }}>{info?.label} · {cd.secao_mm2}mm²</span>
+                  <button onClick={() => removeCondutor(i)} style={{ background: 'none', border: 'none',
+                    color: 'var(--red)', cursor: 'pointer', fontSize: 14 }}>×</button>
+                </div>
+              )
+            })}
+            {seg.condutores.length === 0 && (
+              <div style={{ fontSize: 10.5, color: 'var(--text4)', fontStyle: 'italic' }}>
+                Nenhum condutor ainda — adicione acima.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button className="btn danger" style={{ marginTop: 4 }} onClick={onRemove}>
+          🗑 Remover este eletroduto
+        </button>
+      </div>
     </div>
   )
 }
 
+
 // ── Componente principal ───────────────────────────────────────────
 export function Eletrodutos() {
-  const { rede, addNo, addSegmento, removeNo, removeSegmento, circuitos } = useProjectStore()
+  const { rede, addNo, addSegmento, removeNo, removeSegmento, updateNo, updateSegmento, circuitos } = useProjectStore()
+  const [segSelecionadoId, setSegSelecionadoId] = useState<string | null>(null)
+  const [noSelecionadoId, setNoSelecionadoId] = useState<string | null>(null)
 
   const nos = rede?.nos ?? []
   const segmentos = rede?.segmentos ?? []
@@ -177,6 +237,30 @@ export function Eletrodutos() {
       ...f,
       condutores: [...f.condutores, { tipo: condTipo, secao, circ_id: condCirc }],
     }))
+  }
+
+  // Criação rápida via canvas — desenhar a linha entre 2 nós já cria o
+  // segmento com valores padrão sensatos (diâmetro 20mm, PVC rígido,
+  // comprimento = distância real entre os nós posicionados). O
+  // engenheiro refina depois clicando na linha (condutores, diâmetro
+  // exato, material) — não precisa preencher tudo antes de desenhar.
+  function adicionarSegmentoRapido(origemId: string, destinoId: string) {
+    const origem = nos.find(n => n.id === origemId)
+    const destino = nos.find(n => n.id === destinoId)
+    const dx = (destino?.pos_x ?? 0) - (origem?.pos_x ?? 0)
+    const dy = (destino?.pos_y ?? 0) - (origem?.pos_y ?? 0)
+    const distancia = Math.max(1, Math.round(Math.sqrt(dx * dx + dy * dy) * 10) / 10)
+    const novoId = addSegmento({
+      nome: `${origem?.nome ?? '?'} → ${destino?.nome ?? '?'}`,
+      origem_no_id: origemId,
+      destino_no_id: destinoId,
+      comprimento_m: distancia,
+      diametro_mm: 20,
+      material: 'PVC_rigido',
+      n_curvas_90: 0,
+      condutores: [],
+    } as any)
+    return novoId
   }
 
   function adicionarSegmento() {
@@ -255,17 +339,64 @@ export function Eletrodutos() {
     <div className="page-scroll">
     <div className="page-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-      {/* Diagrama topológico */}
-      <div className="card">
-        <div className="card-header">
-          Diagrama da rede elétrica
-          <span style={{ fontSize: 9.5, color: 'var(--text4)' }}>
-            Verde = OK · Âmbar = limite · Vermelho = excedido
-          </span>
+      {/* Canvas interativo — a linha É o eletroduto, os condutores que
+          passam por ela são representados por simbologia (bolinhas
+          coloridas ao longo da linha, mesma cor da legenda de fios).
+          Desenhar um trecho: clique em "Desenhar eletroduto", clique no
+          nó de origem, clique no nó de destino. Arraste nós livremente
+          no modo padrão para organizar o layout como preferir. */}
+      <div style={{ display: 'grid', gridTemplateColumns: segSelecionadoId ? 'minmax(0,1fr) 320px' : '1fr', gap: 12, alignItems: 'start' }}>
+        <div className="card">
+          <div className="card-header">
+            Canvas — desenhe o eletroduto, veja a fiação
+          </div>
+          <div style={{ padding: 12 }}>
+            {nos.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text4)', fontSize: 11 }}>
+                Adicione nós (QD, caixas, pontos) no formulário abaixo para começar a desenhar.
+              </div>
+            ) : (
+              <EletrodutosCanvas
+                nos={nos} segmentos={segmentos}
+                onUpdateNo={updateNo}
+                onAddSegmento={adicionarSegmentoRapido}
+                onSelectSegmento={setSegSelecionadoId}
+                onSelectNo={setNoSelecionadoId}
+                segmentoSelecionadoId={segSelecionadoId}
+              />
+            )}
+          </div>
         </div>
-        <div style={{ padding: 12 }}>
-          <DiagramaRede nos={nos} segmentos={segmentos} />
-        </div>
+        {segSelecionadoId && (() => {
+          const seg = segmentos.find(s => s.id === segSelecionadoId)
+          if (!seg) return null
+          return (
+            <PainelSegmento
+              seg={seg}
+              circuitos={circuitos}
+              onUpdate={(partial) => updateSegmento(seg.id, partial)}
+              onRemove={() => { removeSegmento(seg.id); setSegSelecionadoId(null) }}
+              onFechar={() => setSegSelecionadoId(null)}
+            />
+          )
+        })()}
+      </div>
+
+      {noSelecionadoId && !segSelecionadoId && (() => {
+        const no = nos.find(n => n.id === noSelecionadoId)
+        if (!no) return null
+        return (
+          <div style={{ fontSize: 11, color: 'var(--text3)', padding: '6px 10px',
+            background: 'var(--gold-dim)', borderRadius: 8, display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+            <b>{no.nome}</b> · {TIPO_NO_LABEL[no.tipo]}
+            <button className="btn ghost icon" style={{ height: 22 }}
+              onClick={() => { removeNo(no.id); setNoSelecionadoId(null) }}>🗑 remover nó</button>
+          </div>
+        )
+      })()}
+
+      <div style={{ fontSize: 10.5, color: 'var(--text4)', padding: '0 2px' }}>
+        ⌄ Formulário detalhado abaixo — útil para lançamento em massa ou ajuste fino
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,280px) minmax(0,1fr)', gap: 12, alignItems: 'start' }}>

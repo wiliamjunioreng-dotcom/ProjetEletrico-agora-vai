@@ -272,6 +272,10 @@ export function Comodos() {
   })
   const [lumModalComodo, setLumModalComodo] = useState<string | null>(null)
   const [form,     setForm]     = useState<Form>(EMPTY)
+  // Divulgação progressiva — opções avançadas (afluência pública, grupo
+  // de circuito) ficam escondidas até o engenheiro pedir explicitamente,
+  // em vez de sempre visíveis pra todo mundo criar um cômodo simples
+  const [showAvancado, setShowAvancado] = useState(false)
   const [lampadas, setLampadas] = useState<LampadaReal[]>([])
   const [tomadas,  setTomadas]  = useState<TomadaItem[]>([])
   const [erros,    setErros]    = useState<Partial<Record<keyof Form, string>>>({})
@@ -564,27 +568,38 @@ export function Comodos() {
             </div>
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
-            color: 'var(--text3)', marginTop: 6, cursor: 'pointer' }}
-            title="NBR 13570 — ativa verificações extras: mínimo 2 circuitos de ILUM se área>100m², e nota de cabeamento LSZH obrigatório">
-            <input type="checkbox" checked={form.afluencia_publico}
-              onChange={e => setForm(f => ({ ...f, afluencia_publico: e.target.checked }))} />
-            Local de afluência de público (loja, escola, igreja...) — NBR 13570
-          </label>
+          {/* Opções avançadas — colapsadas por padrão. A maioria dos
+              cômodos não precisa de nada aqui; abrir só quando necessário
+              evita empilhar campo que 95% das vezes fica vazio mesmo. */}
+          <button type="button" onClick={() => setShowAvancado(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none',
+              border: 'none', cursor: 'pointer', color: 'var(--text4)', fontSize: 10.5,
+              fontWeight: 600, padding: '2px 0', marginTop: 2 }}>
+            <span style={{ transform: showAvancado ? 'rotate(90deg)' : 'none', transition: 'transform .12s', display: 'inline-block' }}>▸</span>
+            {showAvancado ? 'Ocultar opções avançadas' : 'Mais opções (afluência pública, agrupar circuito...)'}
+          </button>
 
-          <div className="fgroup" style={{ marginTop: 6 }}>
-            <label className="flabel" title="Cômodos fisicamente próximos economizam cabo se compartilharem o mesmo circuito de iluminação — mas o sistema não enxerga a planta, só você. Dê o MESMO nome de grupo a cômodos que você sabe estarem próximos (ex: 'Ala Quartos', 'Fundo da Casa') e eles serão agrupados juntos, respeitando o limite de 3 cômodos/800VA por circuito.">
-              Grupo de circuito ILUM (opcional)
-            </label>
-            <input className="finput" value={form.grupo_circuito_ilum}
-              onChange={e => setForm(f => ({ ...f, grupo_circuito_ilum: e.target.value }))}
-              placeholder="ex: Ala Quartos — deixe vazio para agrupamento automático" />
-            <div className="fhint">
-              Cômodos com o mesmo texto aqui ficam no mesmo circuito de ILUM. Sem
-              preenchimento, o sistema agrupa automaticamente por ordem de criação
-              (não pela planta — o sistema não sabe quais cômodos são vizinhos).
+          {showAvancado && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 10px',
+              background: 'var(--surface2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
+                color: 'var(--text3)', cursor: 'pointer' }}
+                title="NBR 13570 — ativa verificações extras: mínimo 2 circuitos de ILUM se área>100m², e nota de cabeamento LSZH obrigatório">
+                <input type="checkbox" checked={form.afluencia_publico}
+                  onChange={e => setForm(f => ({ ...f, afluencia_publico: e.target.checked }))} />
+                Local de afluência de público (loja, escola, igreja...) — NBR 13570
+              </label>
+
+              <div className="fgroup">
+                <label className="flabel" title="Cômodos fisicamente próximos economizam cabo se compartilharem o mesmo circuito de iluminação — mas o sistema não enxerga a planta, só você. Dê o MESMO nome de grupo a cômodos que você sabe estarem próximos (ex: 'Ala Quartos', 'Fundo da Casa') e eles serão agrupados juntos, respeitando o limite de 3 cômodos/800VA por circuito.">
+                  Grupo de circuito ILUM (opcional)
+                </label>
+                <input className="finput" value={form.grupo_circuito_ilum}
+                  onChange={e => setForm(f => ({ ...f, grupo_circuito_ilum: e.target.value }))}
+                  placeholder="ex: Ala Quartos" />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* ── ILUMINAÇÃO ────────────────────────────────────── */}
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>

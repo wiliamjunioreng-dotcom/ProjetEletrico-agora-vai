@@ -125,9 +125,11 @@ interface ProjectState {
   rede:       RedeEletrica
 
   addNo:          (n: Omit<NoTopologico, 'id'>) => void
+  updateNo:       (id: string, partial: Partial<NoTopologico>) => void
   removeNo:       (id: string) => void
-  addSegmento:    (s: Omit<SegmentoEletroduto, 'id' | 'analise'>) => void
+  addSegmento:    (s: Omit<SegmentoEletroduto, 'id' | 'analise'>) => string
   removeSegmento: (id: string) => void
+  updateSegmento: (id: string, partial: Partial<Omit<SegmentoEletroduto, 'id'>>) => void
   recalcularRede: () => void
 
   addCarga:        (c: Omit<Carga, 'id'>) => void
@@ -730,6 +732,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set(s => ({ rede: { ...s.rede, nos: [...s.rede.nos, no] }, modificado: true }))
   },
 
+  updateNo: (id, partial) => {
+    set(s => ({
+      rede: { ...s.rede, nos: s.rede.nos.map(n => n.id === id ? { ...n, ...partial } : n) },
+      modificado: true,
+    }))
+  },
+
   removeNo: (id) => {
     set(s => ({
       rede: {
@@ -746,10 +755,25 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const seg: SegmentoEletroduto = { ...input, id: crypto.randomUUID() }
     const analise = analisarSegmento(seg)
     set(s => ({ rede: { ...s.rede, segmentos: [...s.rede.segmentos, { ...seg, analise }] }, modificado: true }))
+    return seg.id
   },
 
   removeSegmento: (id) => {
     set(s => ({ rede: { ...s.rede, segmentos: s.rede.segmentos.filter(seg => seg.id !== id) }, modificado: true }))
+  },
+
+  updateSegmento: (id, partial) => {
+    set(s => ({
+      rede: {
+        ...s.rede,
+        segmentos: s.rede.segmentos.map(seg => {
+          if (seg.id !== id) return seg
+          const atualizado = { ...seg, ...partial }
+          return { ...atualizado, analise: analisarSegmento(atualizado) }
+        }),
+      },
+      modificado: true,
+    }))
   },
 
   recalcularRede: () => {
