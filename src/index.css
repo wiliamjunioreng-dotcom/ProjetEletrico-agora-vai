@@ -148,103 +148,90 @@ html, body, #root {
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border3); }
 
-/* ── Shell — grid principal ────────────────────────────────────── */
+/* ── Shell — layout flex, sidebar de altura total ─────────────────
+   Estrutura fiel ao LumenSolar (mesma empresa, mesma linguagem): SEM
+   topbar separada cortando a largura toda. Sidebar ocupa a altura
+   inteira; a barra de ações fica LOCAL, só dentro do conteúdo. ───── */
 .shell {
-  display: grid;
-  grid-template-columns: 232px 1fr;
-  grid-template-rows: 52px 1fr;
-  height: 100vh;
-  width: 100%;
+  display: flex;
+  height: 100vh; width: 100%;
   overflow: hidden;
 }
 
-/* ── Topbar ─────────────────────────────────────────────────────── */
-.topbar {
-  grid-column: 1 / -1;
-  background: var(--sb-bg);
-  border-bottom: 1px solid var(--sb-border);
-  display: flex; align-items: center;
-  height: 52px; flex-shrink: 0;
-}
-.topbar-brand {
-  width: 232px; flex-shrink: 0;
-  display: flex; align-items: center; gap: 10px;
-  padding: 0 16px;
-  border-right: 1px solid var(--sb-border);
-  height: 100%; cursor: pointer;
-}
-.logo {
-  width: 30px; height: 30px;
-  background: linear-gradient(135deg, var(--gold-mid), var(--gold-dark));
-  border-radius: var(--r);
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--mono); font-size: 10px; font-weight: 700;
-  color: #1a1408; letter-spacing: -.3px; flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(201,162,39,.35);
-}
-.app-name { font-size: 13px; font-weight: 700; color: #ece8f5; letter-spacing: -.1px; }
-.topbar-center {
-  flex: 1; display: flex; align-items: center;
-  padding: 0 14px; gap: 8px; min-width: 0;
-}
-.proj-chip {
-  display: flex; align-items: center; gap: 7px;
-  background: rgba(255,255,255,.045);
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 20px; padding: 4px 12px;
-  font-size: 11.5px; color: var(--sb-text);
-  max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  cursor: pointer; transition: background .15s; min-width: 0;
-}
-.proj-chip:hover { background: rgba(255,255,255,.08); }
-.proj-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); flex-shrink: 0; }
-.proj-chip .dot.saved { background: var(--green); }
-.topbar-actions {
-  display: flex; gap: 5px; align-items: center;
-  padding-right: 12px; flex-shrink: 0;
-}
-.theme-toggle {
-  width: 30px; height: 30px;
-  background: rgba(255,255,255,.045);
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: var(--r);
-  color: var(--sb-text); cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; transition: all .15s; line-height: 1;
-}
-.theme-toggle:hover { background: rgba(255,255,255,.1); color: #ece8f5; }
-.tb {
-  height: 30px; padding: 0 12px;
-  border-radius: var(--r);
-  border: 1px solid rgba(255,255,255,.08);
-  background: rgba(255,255,255,.045);
-  color: var(--sb-text); font-size: 11.5px; font-weight: 500;
-  cursor: pointer; font-family: var(--font);
-  display: inline-flex; align-items: center; gap: 5px;
-  transition: all .15s; white-space: nowrap;
-}
-.tb:hover { background: rgba(255,255,255,.1); color: #ece8f5; }
-.tb.blue { background: var(--gold-mid); border-color: var(--gold-mid); color: #1a1408; font-weight: 700; }
-.tb.blue:hover { background: var(--gold); }
-
-/* ── Sidebar ─────────────────────────────────────────────────────── */
+/* ── Sidebar ───────────────────────────────────────────────────── */
 .sidebar {
+  width: 220px; flex-shrink: 0;
   background: var(--sb-bg);
-  border-right: 1px solid var(--sb-border);
-  display: flex; flex-direction: column; overflow: hidden;
+  display: flex; flex-direction: column;
+  height: 100%; overflow: hidden;
 }
-.sidebar-scroll { flex: 1; overflow-y: auto; padding: 8px 0; }
-.nav-group-label {
-  padding: 14px 16px 4px;
-  font-size: 9.5px; font-weight: 700;
-  color: var(--sb-label);
-  letter-spacing: .13em; text-transform: uppercase;
+
+/* Logo — círculo dourado + LUMEN branco + subtítulo dourado, mesmo
+   padrão exato do LumenSolar (mesma marca, mesma empresa) */
+.sidebar-logo {
+  padding: 20px 20px 20px; border-bottom: 1px solid #1e2030;
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  flex-shrink: 0;
+}
+.sidebar-logo-badge {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  background: var(--gold-mid);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 900; color: var(--sb-bg2);
+}
+.sidebar-logo-text-main { color: #fff; font-weight: 800; font-size: 13px; letter-spacing: .06em; line-height: 1.1; }
+.sidebar-logo-text-sub  { color: var(--gold-mid); font-weight: 600; font-size: 10.5px; letter-spacing: .04em; line-height: 1.1; }
+
+/* Stepper — passos numerados do fluxo principal, com linha de
+   progresso dourada vertical conectando os círculos */
+.stepper { flex-shrink: 0; padding: 18px 0; position: relative; }
+.stepper-line-bg {
+  position: absolute; left: 38px; top: 26px; width: 2px;
+  background: #1e2030;
+}
+.stepper-line-fill {
+  position: absolute; left: 38px; top: 26px; width: 2px;
+  background: var(--gold-mid); transition: height .4s ease;
+}
+.stepper-item {
+  display: flex; align-items: center; gap: 13px;
+  padding: 9px 20px; cursor: pointer; position: relative;
+  transition: background .15s;
+}
+.stepper-item:hover { background: rgba(255,255,255,.035); }
+.stepper-circle {
+  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 900; z-index: 1;
+  transition: all .2s;
+}
+.stepper-circle.done, .stepper-circle.current {
+  background: var(--gold-mid); color: var(--sb-bg2); border: none;
+}
+.stepper-circle.current { box-shadow: 0 0 0 4px var(--gold-line); }
+.stepper-circle.future {
+  background: #1e2030; color: #3a3d54; border: 2px solid #2a2d3e;
+}
+.stepper-label {
+  font-size: 12px; transition: color .15s;
+}
+.stepper-label.current { color: #fff; font-weight: 700; }
+.stepper-label.done     { color: var(--gold-mid); font-weight: 500; }
+.stepper-label.future   { color: #5a5d72; font-weight: 500; }
+
+/* Ferramentas de apoio — lista secundária, não sequencial (Balanço,
+   Proteção, Eletrodutos, etc) — mesma linguagem visual, hierarquia menor */
+.sidebar-tools { flex: 1; overflow-y: auto; padding: 6px 0 12px; border-top: 1px solid #1e2030; margin-top: 4px; }
+.sidebar-tools-label {
+  padding: 14px 20px 6px;
+  font-size: 9.5px; font-weight: 700; color: var(--sb-label);
+  letter-spacing: .12em; text-transform: uppercase;
 }
 .nav-item {
-  display: flex; align-items: center; gap: 9px;
-  padding: 8px 16px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 20px;
   cursor: pointer; color: var(--sb-text);
-  font-size: 12.5px; font-weight: 500;
+  font-size: 12px; font-weight: 500;
   border-left: 2.5px solid transparent;
   transition: all .12s; user-select: none;
 }
@@ -253,13 +240,8 @@ html, body, #root {
   background: var(--sb-active); color: var(--sb-act-t);
   border-left-color: var(--gold-mid); font-weight: 700;
 }
-.nav-item svg { width: 14px; height: 14px; flex-shrink: 0; opacity: .55; transition: opacity .12s; }
+.nav-item svg { width: 13px; height: 13px; flex-shrink: 0; opacity: .55; transition: opacity .12s; }
 .nav-item:hover svg, .nav-item.active svg { opacity: .9; }
-.nav-step-num {
-  font-family: var(--mono); font-size: 8.5px;
-  color: var(--sb-label); width: 15px; flex-shrink: 0; text-align: center;
-}
-.nav-item.active .nav-step-num { color: var(--gold-mid); }
 .nav-badge {
   margin-left: auto;
   font-size: 9.5px; font-weight: 700;
@@ -267,20 +249,32 @@ html, body, #root {
   background: rgba(232,197,71,.18); color: var(--sb-act-t);
   font-family: var(--mono);
 }
-.progress-track { padding: 10px 14px; border-top: 1px solid var(--sb-border); }
-.progress-label { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--sb-text); margin-bottom: 5px; }
-.progress-bar { height: 3px; background: rgba(255,255,255,.08); border-radius: 2px; overflow: hidden; }
-.progress-fill { height: 100%; border-radius: 2px; background: var(--gold-mid); transition: width .4s ease; }
-.sb-footer { padding: 10px 12px; border-top: 1px solid var(--sb-border); }
-.sb-proj-card { background: var(--sb-bg2); border: 1px solid rgba(255,255,255,.06); border-radius: var(--r); padding: 9px 10px; }
+
+/* Rodapé — status do projeto + botão de config, mesmo padrão deles */
+.sidebar-footer { padding: 14px 20px; border-top: 1px solid #1e2030; flex-shrink: 0; }
+.sb-proj-card { background: var(--sb-bg2); border: 1px solid #2a2d3e; border-radius: var(--r); padding: 9px 10px; margin-bottom: 8px; }
 .sb-proj-name { font-size: 11px; font-weight: 600; color: #c4bfd6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-proj-sub { font-size: 9.5px; color: var(--sb-label); margin-top: 2px; font-family: var(--mono); }
 .sb-status { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
 .sb-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .sb-stat-txt { font-size: 9.5px; color: var(--sb-label); }
+.sb-config-btn {
+  width: 100%; padding: 8px 12px; background: var(--sb-bg2);
+  border: 1px solid #2a2d3e; border-radius: var(--r); color: var(--sb-text);
+  font-size: 12px; font-weight: 600; cursor: pointer; letter-spacing: .03em;
+  display: flex; align-items: center; gap: 8px; font-family: var(--font);
+  transition: all .15s;
+}
+.sb-config-btn:hover { background: #1e2030; color: #c4bfd6; }
 
-/* ── Content ──────────────────────────────────────────────────────── */
-.content { background: var(--bg); display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+/* ── Content — área principal, com barra de ações LOCAL no topo ──── */
+.content { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+.content-actionbar {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 8px 24px; display: flex; align-items: center; gap: 12px;
+  flex-shrink: 0; min-width: 0;
+}
+
 
 /* ── Page header ──────────────────────────────────────────────────── */
 .page-header {
