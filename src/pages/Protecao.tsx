@@ -2,6 +2,8 @@
 import { useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import { calcIcc } from '../core/engine'
+import { getUcMinimoDPS, ligacoesDPSAplicaveis } from '../data/nbr5410tables'
+import type { LigacaoDPS } from '../data/nbr5410tables'
 
 type Aba = 'tripartida' | 'curto' | 'seletividade' | 'dps'
 
@@ -19,6 +21,8 @@ export function Protecao() {
 
   const icc_rede  = (projeto as any).icc_rede_ka || 3
   const v_linha   = (projeto as any).v_linha || 220
+  const v_fase    = (projeto as any).v_fase || 127
+  const aterramento = ((projeto as any).aterramento || 'TN-S') as 'TN-S'|'TN-C'|'TN-C-S'|'TT'|'IT'
   const in_geral  = demanda?.in_geral || 0
   const in_max_c  = Math.max(...ci.map(c => c.in_disj || 0), 0)
   const sel_ok    = in_geral > in_max_c
@@ -370,15 +374,44 @@ export function Protecao() {
       {aba === 'dps' && (
         <div style={{ padding: '14px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div className="card">
-            <div className="card-header">DPS — NBR 5410 item 7.4 + IEC 61643-11</div>
+            <div className="card-header">DPS — NBR 5410 Tabela 49 (Uc) + item 7.4 + IEC 61643-11</div>
             <div style={{ padding: '12px 14px', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
-              <div style={{ fontWeight: 600, color: 'var(--blue)', fontSize: 13, marginBottom: 4 }}>Classe II — residencial/comercial</div>
-              {[['Tensão nominal (Un)',`${v_linha} V CA`],['Tensão máxima (Uc)',`${Math.round(v_linha*1.15)} V (≥ 1,15 × Un)`],['Nível de proteção (Up)','≤ 2,5 kV (Categoria II)'],['Corrente de descarga (In)','≥ 5 kA (forma 8/20 μs)'],['Ponto de instalação','Entrada do QD principal'],['Configuração (TN-S)','Fase/fase + neutro/terra'],['Fusível de backup','gL/gG conforme fabricante']].map(([k,v]) => (
+              <div style={{ fontWeight: 600, color: 'var(--blue)', fontSize: 13, marginBottom: 2 }}>
+                Classe II — {aterramento} · {v_fase}/{v_linha}V
+              </div>
+              <div style={{ fontSize: 10.5, color: 'var(--text4)', marginBottom: 6 }}>
+                Uc mínimo calculado pela Tabela 49, específico para o esquema de
+                aterramento e ponto de ligação — não é um valor fixo genérico.
+              </div>
+
+              {/* Uc por ligação — calculado, não mais fixo */}
+              {ligacoesDPSAplicaveis(aterramento).map(lig => {
+                const r = getUcMinimoDPS(lig, aterramento, v_fase, v_linha)
+                const labels: Record<LigacaoDPS, string> = {
+                  'fase-neutro': 'Fase → Neutro',
+                  'fase-pe':     'Fase → PE (Terra)',
+                  'fase-pen':    'Fase → PEN',
+                  'neutro-pe':   'Neutro → PE',
+                }
+                return (
+                  <div key={lig} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ color: 'var(--text3)' }}>Uc mín. — {labels[lig]}</span>
+                    <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--blue)' }}>
+                      {r.aplicavel ? `${r.uc_minimo_v} V` : '— n/a'}
+                    </span>
+                  </div>
+                )
+              })}
+
+              {[['Nível de proteção (Up)','≤ 2,5 kV (Categoria II)'],['Corrente de descarga (In)','≥ 5 kA (forma 8/20 μs)'],['Ponto de instalação','Entrada do QD principal'],['Fusível de backup','gL/gG conforme fabricante']].map(([k,v]) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
                   <span style={{ color: 'var(--text3)' }}>{k}</span>
                   <span style={{ fontFamily: 'var(--mono)', fontWeight: 500 }}>{v}</span>
                 </div>
               ))}
+              <div style={{ fontSize: 9.5, color: 'var(--text4)', marginTop: 2 }}>
+                Compre o DPS com Uc ≥ ao maior valor acima aplicável à ligação real do seu quadro.
+              </div>
             </div>
           </div>
           <div className="card">

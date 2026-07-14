@@ -149,6 +149,84 @@ export function getFsolo(resistividade_km_w: number, metodo: MetodoInstalacao): 
   return 1.0
 }
 
+// ── Tabela 49 — Tensão máxima de operação contínua (Uc) do DPS ───
+// Cruza o ponto de ligação do DPS com o esquema de aterramento da
+// instalação. Uo = tensão fase-neutro; U = tensão fase-fase.
+//
+// DPS entre FASE e NEUTRO:
+//   TT, TN-S, IT (com neutro distribuído) → 1,1 × Uo
+//   TN-C não se aplica (não tem neutro separado do PE — é PEN)
+// DPS entre FASE e PE:
+//   TT, TN-S → 1,1 × Uo
+//   IT (com ou sem neutro) → U (tensão fase-fase)
+//   TN-C não se aplica (é PEN, não PE separado)
+// DPS entre FASE e PEN:
+//   TN-C → 1,1 × Uo
+//   Demais esquemas não se aplicam (não têm condutor PEN)
+// DPS entre NEUTRO e PE:
+//   TT, TN-S, IT (com neutro) → Uo
+//   TN-C não se aplica
+//
+// TN-C-S: tratado como TN-S para fins desta tabela — no trecho da
+// instalação onde PE já está fisicamente separado do neutro (o caso
+// relevante para instalação de DPS no quadro), o comportamento é
+// equivalente ao TN-S. Esta é uma interpretação prática, não uma
+// citação direta da norma para este esquema específico — a tabela
+// fornecida cobre explicitamente TN-C, TN-S, TT e IT, não TN-C-S.
+export type LigacaoDPS = 'fase-neutro' | 'fase-pe' | 'fase-pen' | 'neutro-pe'
+
+export interface UcDPSResult {
+  aplicavel: boolean
+  uc_minimo_v: number | null
+  motivo?: string  // por que não se aplica, quando aplicavel=false
+}
+
+export function getUcMinimoDPS(
+  ligacao: LigacaoDPS,
+  esquema: 'TN-S' | 'TN-C' | 'TN-C-S' | 'TT' | 'IT',
+  v_fase: number,   // Uo
+  v_linha: number,  // U
+): UcDPSResult {
+  const esquemaEquiv = esquema === 'TN-C-S' ? 'TN-S' : esquema
+
+  switch (ligacao) {
+    case 'fase-neutro':
+      if (esquemaEquiv === 'TN-C') {
+        return { aplicavel: false, uc_minimo_v: null, motivo: 'TN-C não tem neutro separado do PE (é condutor PEN) — ver ligação fase-PEN' }
+      }
+      return { aplicavel: true, uc_minimo_v: Math.round(1.1 * v_fase) }
+
+    case 'fase-pe':
+      if (esquemaEquiv === 'TN-C') {
+        return { aplicavel: false, uc_minimo_v: null, motivo: 'TN-C não tem PE separado (é condutor PEN) — ver ligação fase-PEN' }
+      }
+      if (esquemaEquiv === 'IT') {
+        return { aplicavel: true, uc_minimo_v: Math.round(v_linha) }
+      }
+      return { aplicavel: true, uc_minimo_v: Math.round(1.1 * v_fase) }
+
+    case 'fase-pen':
+      if (esquemaEquiv !== 'TN-C') {
+        return { aplicavel: false, uc_minimo_v: null, motivo: `Esquema ${esquema} não usa condutor PEN — só aplicável em TN-C` }
+      }
+      return { aplicavel: true, uc_minimo_v: Math.round(1.1 * v_fase) }
+
+    case 'neutro-pe':
+      if (esquemaEquiv === 'TN-C') {
+        return { aplicavel: false, uc_minimo_v: null, motivo: 'TN-C não tem neutro separado do PE (são o mesmo condutor PEN)' }
+      }
+      return { aplicavel: true, uc_minimo_v: Math.round(v_fase) }
+  }
+}
+
+// Lista as ligações de DPS fisicamente possíveis para um esquema —
+// evita que a UI mostre "não aplicável" para combinações que nem
+// deveriam aparecer como opção.
+export function ligacoesDPSAplicaveis(esquema: 'TN-S'|'TN-C'|'TN-C-S'|'TT'|'IT'): LigacaoDPS[] {
+  if (esquema === 'TN-C') return ['fase-pen']
+  return ['fase-neutro', 'fase-pe', 'neutro-pe']
+}
+
 // ── §6.2.5.6.1 — Fator de correção por harmônicas de 3ª ordem ────
 // Circuitos trifásicos com neutro (fase RST) alimentando carga
 // concentrada de eletrônica/LED podem ter 3ª harmônica alta o
@@ -174,7 +252,7 @@ export function getFatorHarmonica(terceira_harmonica_pct: number | undefined, fa
   return FATOR_3H
 }
 
-// ── Tabela 54 — Seção do PE ──────────────────────────────────────
+// ── Tabela 58 — Seção do PE ────────────────────────────────────── (número corrigido de 54 para 58, confirmado contra o texto da norma)
 export function getSecaoPE(secao_fase: number): number {
   if (secao_fase <= 16) return secao_fase
   if (secao_fase <= 35) return 16
