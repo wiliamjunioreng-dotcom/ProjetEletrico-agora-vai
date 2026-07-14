@@ -6,7 +6,7 @@ import { comprimentoMaximo } from './minFaultCurrentAnalysis'
 
 import {
   getFt, getFa, getIz, getSecaoMinimaPorIz, getSecaoPE,
-  getDisjuntor, getIDR, SECAO_MINIMA, SECOES_COMERCIAIS,
+  getDisjuntor, getIDR, getSecaoMinima, SECOES_COMERCIAIS,
 } from '../data/nbr5410tables'
 import { validarCircuito } from './rules/index'
 import { bloqueiaCalculo } from './rules/context'
@@ -282,8 +282,12 @@ export function stageSecao(e: EntradaCircuito, t: ArtTensao, f: ArtFatores): [Ar
   const secao_invalida = secao_por_iz_raw < 0  // -1 = combinação inválida ou inviável
   const secao_por_iz = secao_invalida ? 240 : secao_por_iz_raw  // fallback defensivo
 
-  // Norma como parâmetro de projeto (piso mínimo de segurança)
-  const secao_min_projeto = SECAO_MINIMA[e.tipo] ?? 1.5
+  // Norma como parâmetro de projeto (piso mínimo de segurança) —
+  // Tabela 47, com diferenciação de material (Al = piso único 16mm²).
+  // Consolidado: antes duplicava o mesmo lookup direto de engine.ts,
+  // sem cobrir Alumínio — mesmo padrão de risco já corrigido para o
+  // K-factor e o PE nesta auditoria.
+  const secao_min_projeto = getSecaoMinima(e.tipo, e.material)
 
   // Decisão: máximo entre física e piso de projeto
   const secao_final = Math.max(secao_por_iz, secao_min_projeto)

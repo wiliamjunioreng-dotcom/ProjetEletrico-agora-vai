@@ -4,8 +4,8 @@ import { inferirCurva, FATOR_K } from './protectionDevicePhysics'
 // Motor de cálculo elétrico — física pura + auditoria normativa
 
 import {
-  getIz, getFt, getFa, getFsolo, getFatorHarmonica, getSecaoPE, getSecaoMinimaPorIz,
-  getDisjuntor, getIDR, SECAO_MINIMA, getFatorDemandaCEMIG,
+  getIz, getFt, getFa, getFaEnterrado, getFsolo, getFatorHarmonica, getSecaoPE, getSecaoMinimaPorIz,
+  getSecaoMinima, getDisjuntor, getIDR, getFatorDemandaCEMIG,
   getReservasQD, getTamanhoQD, getTipoLigacaoCEMIG, POT_TOMADA
 } from '../data/nbr5410tables'
 import type {
@@ -119,6 +119,15 @@ export interface CircuitInput {
   // eletrônica/LED. DECLARADA pelo engenheiro; acima de 15%, aplica
   // fator 0,86 sobre Iz efetiva. Se omitido, sem correção.
   terceira_harmonica_pct?: number
+  // Tabela 45 — só relevante para métodos enterrados (D1/D2) quando os
+  // circuitos estão em DUTOS SEPARADOS no solo (não compartilhando o
+  // mesmo eletroduto — esse caso já é coberto por n_agrup + Tabela 42).
+  // Se declarado, substitui o cálculo de Fa padrão pela matriz de
+  // agrupamento enterrado por distância. Se omitido em método D1/D2,
+  // assume o comportamento conservador padrão (Tabela 42, como se
+  // agrupado no mesmo duto).
+  tipo_condutor_enterrado?: 'multipolar' | 'unipolar'
+  distancia_dutos_m?: number
   // Override do engenheiro (decisão travada, sistema respeita)
   override_secao_mm2?: number
   override_in_disj?: number
@@ -195,7 +204,16 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
 
   // 3. Fatores de correção (NBR 5410 Tabelas 40 e 42)
   r.ft = getFt(e.t_amb, e.isolacao)
-  r.fa = getFa(e.n_agrup)
+  // Fa: Tabela 42 (agrupamento no mesmo duto) por padrão. Para métodos
+  // enterrados (D1/D2) com dutos SEPARADOS declarados explicitamente,
+  // usa a Tabela 45 (agrupamento enterrado por distância) em vez —
+  // cenário fisicamente diferente e menos penalizante que dividir o
+  // mesmo eletroduto.
+  const metodoEnterrado = e.metodo === 'D1' || e.metodo === 'D2'
+  const usaTabela45 = metodoEnterrado && e.tipo_condutor_enterrado !== undefined && e.distancia_dutos_m !== undefined
+  r.fa = usaTabela45
+    ? getFaEnterrado(e.tipo_condutor_enterrado!, e.n_agrup, e.distancia_dutos_m!)
+    : getFa(e.n_agrup)
   // Tabela 41 — correção por resistividade térmica do solo, só ativa
   // para métodos enterrados (D1/D2); retorna 1.0 para os demais e
   // quando não informado (assume padrão normativo 2,5 K.m/W)
@@ -211,8 +229,9 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
   const divisor = r.fa * r.ft
   r.irc = divisor > 0 ? r.ib / divisor : r.ib
 
-  // 5. Seção mínima normativa
-  const sec_min_norma = SECAO_MINIMA[e.tipo] ?? 2.5
+  // 5. Seção mínima normativa — Tabela 47 (Cobre: 1,5 ILUM / 2,5 força |
+  // Alumínio: piso mecânico único de 16mm² independente do tipo)
+  const sec_min_norma = getSecaoMinima(e.tipo, e.material)
 
   // 6. Seção por Iz
   const sec_iz = getSecaoMinimaPorIz(r.irc, metodo, n_cond, e.material, e.isolacao)

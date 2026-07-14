@@ -122,6 +122,67 @@ export function getFa(n_circ: number): number {
   return 0.38
 }
 
+// ── Tabela 45 — Fator de agrupamento para linhas ENTERRADAS ──────
+// Só se aplica a métodos D1/D2 quando os circuitos estão em eletrodutos
+// SEPARADOS no solo (cada circuito no seu próprio duto, com afastamento
+// de ar entre eles) — cenário fisicamente diferente de vários circuitos
+// dividindo o MESMO eletroduto (que usa a Tabela 42/getFa acima). Quanto
+// maior o afastamento entre dutos, melhor a dissipação térmica de cada
+// um isoladamente, logo o fator de redução é menos penalizante.
+//
+// Fonte: texto transcrito da NBR 5410 Tabela 45, trazido nesta sessão
+// (não verificação independente minha do PDF físico — mesmo padrão de
+// confiança das demais tabelas trazidas por citação direta/estruturada
+// nesta auditoria). Duas irregularidades notadas na transcrição que
+// valem conferência extra contra o documento original antes de uso
+// legal formal:
+//   (a) multipolar, 6 circuitos: os 3 últimos afastamentos (0,25/0,5/
+//       1,0m) têm o MESMO valor (0,80) — pode ser um platô real da
+//       norma nessa faixa, ou artefato de transcrição.
+//   (b) unipolar: as linhas de 5 e 6 circuitos são IDÊNTICAS nas 4
+//       colunas — incomum para uma tabela que normalmente degrada
+//       (mesmo que levemente) com mais circuitos.
+export type TipoCondutorEnterrado = 'multipolar' | 'unipolar'
+
+// [n_circuitos][distancia_m] → fator. Distâncias tabeladas: 0, 0.25, 0.5, 1.0
+const TABELA_45_MULTIPOLAR: Record<number, Record<number, number>> = {
+  2: { 0: 0.85, 0.25: 0.90, 0.5: 0.95, 1.0: 0.95 },
+  3: { 0: 0.75, 0.25: 0.85, 0.5: 0.90, 1.0: 0.95 },
+  4: { 0: 0.70, 0.25: 0.80, 0.5: 0.85, 1.0: 0.90 },
+  5: { 0: 0.65, 0.25: 0.80, 0.5: 0.85, 1.0: 0.90 },
+  6: { 0: 0.60, 0.25: 0.80, 0.5: 0.80, 1.0: 0.80 },
+}
+const TABELA_45_UNIPOLAR: Record<number, Record<number, number>> = {
+  2: { 0: 0.80, 0.25: 0.90, 0.5: 0.90, 1.0: 0.95 },
+  3: { 0: 0.70, 0.25: 0.80, 0.5: 0.85, 1.0: 0.90 },
+  4: { 0: 0.65, 0.25: 0.75, 0.5: 0.80, 1.0: 0.90 },
+  5: { 0: 0.60, 0.25: 0.70, 0.5: 0.80, 1.0: 0.90 },
+  6: { 0: 0.60, 0.25: 0.70, 0.5: 0.80, 1.0: 0.90 },
+}
+
+export function getFaEnterrado(
+  tipo: TipoCondutorEnterrado,
+  n_circuitos: number,
+  distancia_m: number,
+): number {
+  const tabela = tipo === 'multipolar' ? TABELA_45_MULTIPOLAR : TABELA_45_UNIPOLAR
+  const n = Math.max(2, Math.min(6, Math.round(n_circuitos)))  // tabela cobre 2-6
+  const linha = tabela[n]
+
+  const distancias = [0, 0.25, 0.5, 1.0]
+  if (distancia_m <= distancias[0]) return linha[0]
+  if (distancia_m >= distancias[distancias.length - 1]) return linha[1.0]
+
+  for (let i = 0; i < distancias.length - 1; i++) {
+    const d1 = distancias[i], d2 = distancias[i + 1]
+    if (distancia_m >= d1 && distancia_m <= d2) {
+      const f1 = linha[d1], f2 = linha[d2]
+      return Math.round((f1 + (f2 - f1) * (distancia_m - d1) / (d2 - d1)) * 1000) / 1000
+    }
+  }
+  return linha[1.0]
+}
+
 // ── Tabela 41 — Fator de correção por resistividade térmica do solo ──
 // Aplicável a métodos de instalação enterrados (D1, D2). Referência:
 // resistividade padrão da NBR 5410 = 2,5 K.m/W → Fsolo = 1,000.
@@ -324,11 +385,23 @@ export function getTamanhoQD(n_total: number): number {
 }
 
 // ── Seção mínima por tipo — NBR 5410 item 6.2.5 ─────────────────
+// Tabela 47 — seção mínima dos condutores (cobre). Circuitos de
+// sinalização/controle (0,5mm²) não modelados — o sistema não tem um
+// CircuitType próprio para esse tipo de circuito (só ILUM/TUG/TUE/GERAL).
 export const SECAO_MINIMA: Record<string, number> = {
   ILUM: 1.5,
   TUG:  2.5,
   TUE:  2.5,
   GERAL: 2.5,
+}
+
+// Tabela 47 — piso mecânico para Alumínio (16mm², independente do
+// tipo de circuito) — antes SECAO_MINIMA só cobria Cobre.
+export const SECAO_MINIMA_AL_MM2 = 16
+
+export function getSecaoMinima(tipo: string, material: 'Cu' | 'Al' = 'Cu'): number {
+  if (material === 'Al') return SECAO_MINIMA_AL_MM2
+  return SECAO_MINIMA[tipo] ?? 2.5
 }
 
 // ── Tipo de ligação CEMIG ND-5.1 ────────────────────────────────
