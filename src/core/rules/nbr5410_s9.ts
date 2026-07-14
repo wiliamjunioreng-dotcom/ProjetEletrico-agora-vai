@@ -20,6 +20,7 @@
 
 import type { ResultadoNorma } from './context'
 import type { Comodo } from '../../types/electrical'
+import { verificarComodoNBR13570 } from './nbr13570'
 
 const N = 'ABNT NBR 5410:2004+Em1:2008'
 
@@ -261,6 +262,7 @@ export function verificarComodoNBR9(comodo: Comodo): ResultadoNorma[] {
     ...verificarCircuitosDedicados(comodo),
     ...verificarILUMMinima(comodo),
     ...verificarVolumesBanheiro(comodo),
+    ...verificarComodoNBR13570(comodo),  // norma diferente (13570, não 5410), mesmo ponto de entrada por conveniência
   ]
 }
 

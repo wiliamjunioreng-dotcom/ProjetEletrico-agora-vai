@@ -183,6 +183,35 @@ export function getFaEnterrado(
   return linha[1.0]
 }
 
+// ── Anexo D — Fator de Manutenção (FM) luminotécnico ─────────────
+// NBR ISO/CIE 8995-1, Tabelas D.2/D.3/D.4. Nos dados trazidos nesta
+// sessão, os valores são IDÊNTICOS entre os 3 tipos de lâmpada
+// (fluorescente tubular, fluorescente compacta, vapor metálico) para
+// a mesma condição de ambiente/ciclo de limpeza — por isso o parâmetro
+// de tipo de lâmpada foi omitido; só a condição do ambiente importa
+// com os dados disponíveis.
+//
+// Nota importante trazida pela fonte: 0,80 (o valor que o sistema
+// usava como PADRÃO FIXO até esta correção) é o cenário mais
+// OTIMISTA possível ("ambiente muito limpo, limpeza anual") — não uma
+// média típica. Um escritório padrão com limpeza a cada 3 anos usa
+// 0,67. Por isso 0,80 permanece como DEFAULT (compatibilidade com
+// cálculos já feitos), mas o campo condicao_ambiente permite declarar
+// a condição real para um resultado mais realista.
+export type CondicaoAmbienteFM = 'muito_limpo' | 'normal' | 'normal_maior_acumulo' | 'sujo'
+
+const FM_TABELA: Record<CondicaoAmbienteFM, number> = {
+  muito_limpo:          0.80,  // limpeza anual
+  normal:                0.67,  // limpeza a cada 3 anos (2 para vapor metálico)
+  normal_maior_acumulo:  0.57,  // limpeza a cada 3 anos, maior retenção de pó
+  sujo:                  0.50,  // limpeza a cada 3 anos (2 para vapor metálico), lâmpada em fim de vida
+}
+
+export function getFatorManutencao(condicao?: CondicaoAmbienteFM): number {
+  if (!condicao) return 0.80  // default histórico — cenário otimista, não recomendado para novos projetos
+  return FM_TABELA[condicao] ?? 0.80
+}
+
 // ── Tabela 41 — Fator de correção por resistividade térmica do solo ──
 // Aplicável a métodos de instalação enterrados (D1, D2). Referência:
 // resistividade padrão da NBR 5410 = 2,5 K.m/W → Fsolo = 1,000.

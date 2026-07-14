@@ -5,7 +5,7 @@ import { inferirCurva, FATOR_K } from './protectionDevicePhysics'
 
 import {
   getIz, getFt, getFa, getFaEnterrado, getFsolo, getFatorHarmonica, getSecaoPE, getSecaoMinimaPorIz,
-  getSecaoMinima, getDisjuntor, getIDR, getFatorDemandaCEMIG,
+  getSecaoMinima, getFatorManutencao, getDisjuntor, getIDR, getFatorDemandaCEMIG,
   getReservasQD, getTamanhoQD, getTipoLigacaoCEMIG, POT_TOMADA
 } from '../data/nbr5410tables'
 import type {
@@ -550,6 +550,11 @@ export interface LuminoInput {
   // Ambiente é de trabalho contínuo? (escritório, oficina, bancada)
   // Determina se o Ra<80 vira aviso ou é só informativo.
   trabalho_continuo?: boolean
+  // Anexo D NBR ISO/CIE 8995-1 — condição do ambiente/ciclo de limpeza,
+  // determina o Fator de Manutenção real. Se omitido, usa 0,80 (cenário
+  // mais otimista — "ambiente muito limpo, limpeza anual") por
+  // compatibilidade histórica; recomenda-se declarar a condição real.
+  condicao_ambiente_fm?: 'muito_limpo' | 'normal' | 'normal_maior_acumulo' | 'sujo'
 }
 
 export interface LuminoResult {
@@ -590,8 +595,10 @@ export function calcLuminotecnico(comp: number, larg: number, input: LuminoInput
   const refl_media = (input.refl_teto + input.refl_parede * 0.5 + input.refl_piso * 0.2) / 1.4
   const cu = Math.min(0.85, Math.max(0.20, cu_base * (0.6 + 0.4 * refl_media)))
 
-  // Fator de manutenção
-  const fm = 0.80
+  // Fator de manutenção — Anexo D NBR ISO/CIE 8995-1 (default 0,80
+  // = cenário otimista, sobreposto quando o engenheiro declara a
+  // condição real do ambiente)
+  const fm = getFatorManutencao(input.condicao_ambiente_fm)
 
   // Fluxo necessário e número de luminárias
   const phi_total = (input.iluminancia_lux * area) / (cu * fm)

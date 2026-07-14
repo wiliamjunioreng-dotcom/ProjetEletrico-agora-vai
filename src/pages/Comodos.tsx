@@ -158,6 +158,7 @@ interface Form {
   tipo:      string
   area:      string
   perim:     string
+  afluencia_publico: boolean
   // Iluminação
   ilum_modo: 'auto' | 'manual' | 'lampadas' | 'string'
   ilum_manual: string
@@ -172,7 +173,7 @@ interface Form {
 }
 
 const EMPTY: Form = {
-  nome: '', tipo: 'Social', area: '', perim: '',
+  nome: '', tipo: 'Social', area: '', perim: '', afluencia_publico: false,
   ilum_modo: 'auto', ilum_manual: '', ilum_string: '',
   tug_modo:  'auto', tug_manual: '',
   tue_d: '', tue_v: '', tue_fase: 'mono' as const, tue_tipo: 'geral' as const,
@@ -429,6 +430,7 @@ export function Comodos() {
       area_m2:      area,
       perimetro_m:  perim,
       pe_direito_m: 2.8,
+      afluencia_publico: form.afluencia_publico,
       tues,
       // Passar os valores calculados explicitamente — o store vai respeitá-los
       ilum_va:      ilumEfetiva,
@@ -578,6 +580,14 @@ export function Comodos() {
               {erros.perim && <div style={{ fontSize: 10, color: 'var(--red)' }}>{erros.perim}</div>}
             </div>
           </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
+            color: 'var(--text3)', marginTop: 6, cursor: 'pointer' }}
+            title="NBR 13570 — ativa verificações extras: mínimo 2 circuitos de ILUM se área>100m², e nota de cabeamento LSZH obrigatório">
+            <input type="checkbox" checked={form.afluencia_publico}
+              onChange={e => setForm(f => ({ ...f, afluencia_publico: e.target.checked }))} />
+            Local de afluência de público (loja, escola, igreja...) — NBR 13570
+          </label>
 
           {/* ── ILUMINAÇÃO ────────────────────────────────────── */}
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>

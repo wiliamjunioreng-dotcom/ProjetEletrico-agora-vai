@@ -53,6 +53,7 @@ interface AmbienteCalc {
   refl_teto: number
   refl_parede: number
   refl_piso: number
+  condicao_fm: 'muito_limpo' | 'normal' | 'normal_maior_acumulo' | 'sujo'
 }
 
 const EMPTY: Omit<AmbienteCalc, 'id'> = {
@@ -61,6 +62,7 @@ const EMPTY: Omit<AmbienteCalc, 'id'> = {
   lux: 200, luminaria_idx: 0,
   pot_custom: 0, lm_custom: 0,
   refl_teto: 0.7, refl_parede: 0.5, refl_piso: 0.2,
+  condicao_fm: 'muito_limpo',
 }
 
 export function Luminotecnico() {
@@ -129,6 +131,7 @@ export function Luminotecnico() {
       refl_piso:      a.refl_piso,
       luminaria_lm:   lm,
       luminaria_pot_w: pot,
+      condicao_ambiente_fm: a.condicao_fm,
     }
     return calcLuminotecnico(a.comp, a.larg, input)
   }
@@ -154,6 +157,7 @@ export function Luminotecnico() {
                    : c.tipo === 'Garagem' ? 'Garagem'
                    : 'Sala de estar'
         return {
+          ...EMPTY,
           id:           crypto.randomUUID(),
           nome:         c.nome,
           ambiente:     amb,
@@ -316,6 +320,22 @@ export function Luminotecnico() {
                   <div className="fhint">{hint}</div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Fator de manutenção — Anexo D NBR ISO/CIE 8995-1 */}
+          <div className="fgroup" style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+            <label className="flabel" title="Anexo D — FM real por condição de ambiente e ciclo de limpeza. O padrão 'muito limpo' (0,80) é o cenário mais otimista, não uma média típica.">
+              Condição do ambiente (Fator de Manutenção)
+            </label>
+            <select className="fselect" value={form.condicao_fm} onChange={upd('condicao_fm')}>
+              <option value="muito_limpo">Muito limpo — limpeza anual (FM=0,80)</option>
+              <option value="normal">Normal — limpeza a cada 3 anos (FM=0,67)</option>
+              <option value="normal_maior_acumulo">Normal, maior acúmulo de pó (FM=0,57)</option>
+              <option value="sujo">Ambiente sujo — indústria/garagem (FM=0,50)</option>
+            </select>
+            <div className="fhint">
+              Escritório padrão real costuma ser "Normal" (0,67), não o default otimista.
             </div>
           </div>
 

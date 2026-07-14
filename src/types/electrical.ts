@@ -168,6 +168,11 @@ export interface Comodo {
   // TUEs do cômodo
   tues: TUE[]
 
+  // Local de afluência de público — NBR 13570 (ex: loja de shopping,
+  // escola, igreja). Ativa verificações adicionais: §4.10.1 exige
+  // mínimo 2 circuitos terminais de ILUM em ambientes >100m².
+  afluencia_publico?: boolean
+
   // Luminotécnico (opcional)
   lumino?: LuminoData
 }
