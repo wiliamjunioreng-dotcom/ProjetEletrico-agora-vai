@@ -178,11 +178,14 @@ export interface CargaManual {
   readonly abaixo_nbr:  boolean
   readonly nbr_min_va:  number
 
-  // Zona de instalação em locais contendo banheira/chuveiro — NBR 5410
-  // §9.1, Volumes 0 a 3. DECLARADA pelo engenheiro (não detectada por
-  // geometria — o sistema não modela a posição 3D da banheira/box).
+  // Distância até a banheira/box de chuveiro mais próximo, em metros —
+  // NBR 5410 §9.1 (Volumes 0-3). DECLARADA pelo engenheiro (não detectada
+  // por geometria — o sistema não modela a posição 3D da banheira/box).
+  // O engenheiro informa a medida bruta que já tem na cabeça olhando a
+  // planta; o motor classifica a zona e aplica a restrição — não pede
+  // pra ele traduzir a medida em terminologia de norma antes de digitar.
   // Só relevante quando o cômodo é do tipo 'Banho'; ignorada nos demais.
-  readonly volume_banheiro?: 'V0' | 'V1' | 'V2' | 'V3' | 'fora'
+  readonly distancia_box_m?: number
 
   // ── Conexões físicas (preenchidas ao completar o projeto) ────────
   // Ponto elétrico que materializa esta carga na planta

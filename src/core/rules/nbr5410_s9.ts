@@ -179,56 +179,73 @@ export function verificarILUMMinima(comodo: Comodo): ResultadoNorma[] {
 
 // ── §9.1 — Volumes 0 a 3 em locais com banheira/chuveiro ──────────
 // A norma restringe o TIPO de equipamento elétrico permitido conforme
-// a proximidade com a fonte de água — não a quantidade, como as outras
-// regras §9.6 acima. Zona DECLARADA pelo engenheiro (campo
-// CargaManual.volume_banheiro), não detectada por geometria.
+// a proximidade com a fonte de água. Em vez de pedir que o engenheiro
+// classifique a zona (Volume 0/1/2/3 — terminologia da norma, exige
+// que ele já saiba a regra pra escolher certo), pedimos a MEDIDA BRUTA
+// que ele já tem olhando a planta — distância até a borda da banheira/
+// box — e o motor classifica e aplica a restrição sozinho.
 //
-// Faixas de referência usuais (IEC 60364-7-701 / prática NBR 5410 —
-// confira contra o documento físico da norma para o projeto formal):
-//   Volume 0: dentro da banheira/box do chuveiro
-//   Volume 1: acima, até 2,25m de altura
-//   Volume 2: até 0,60m além do Volume 1
-//   Volume 3: até 2,40m além do Volume 2 (total ~3,00m da banheira/box)
-//
-// Restrições:
-//   V0, V1: nenhuma tomada ou interruptor padrão é permitido — só
-//           equipamento fixo apropriado ao local (o próprio chuveiro,
-//           por exemplo), com grau de proteção IP adequado.
-//   V2:     tomada padrão NÃO é permitida (só tomada de barbear com
-//           transformador de isolamento — exceção não modelada aqui;
-//           tratado como não permitido por segurança/simplicidade).
-//   V3:     tomada é permitida, mas IDR 30mA é obrigatório — já
-//           garantido pela regra geral de área molhada (ehAreaMolhada)
-//           para qualquer circuito num cômodo tipo Banho, então aqui
-//           é só confirmação informativa.
+// Distâncias de referência (IEC 60364-7-701 / prática NBR 5410 §9.1.2.1
+// — confira contra o documento físico da norma antes de uso formal):
+//   < 0,60m  → Volumes 0/1/2 combinados (a distinção entre eles depende
+//              também de altura, que não pedimos para manter a UI simples)
+//   0,60m a 3,00m → Volume 3
+//   > 3,00m  → fora dos volumes de restrição especial
+export const LIMITE_VOL_RESTRITO_M = 0.60
+export const LIMITE_VOL3_M = 3.00
+
 export function verificarVolumesBanheiro(comodo: Comodo): ResultadoNorma[] {
   if (comodo.tipo !== 'Banho') return []
   const resultados: ResultadoNorma[] = []
 
   for (const carga of comodo.cargas_manuais) {
-    const vol = carga.volume_banheiro
-    if (!vol || vol === 'fora') continue
+    const d = carga.distancia_box_m
+    if (d === undefined || d === null) continue
 
-    const tipo_ponto = carga.tipo === 'ILUM' ? 'ponto de iluminação' : 'tomada/ponto elétrico'
+    const dentroZonaRestrita = d < LIMITE_VOL_RESTRITO_M
+    const emVolume3          = d >= LIMITE_VOL_RESTRITO_M && d < LIMITE_VOL3_M
 
-    if (vol === 'V0' || vol === 'V1') {
+    if (carga.tipo === 'TUE') {
+      // TUE nesta zona costuma SER o próprio equipamento que deve estar
+      // ali (chuveiro, aquecedor de água) — a norma prevê e exige isso
+      // no Volume 1. Não bloqueia; só lembra do grau de proteção IP.
+      if (dentroZonaRestrita) {
+        resultados.push({
+          codigo: 'NBR5410.9.1.TUEproximo', conforme: true, severidade: 'info',
+          descricao: `"${carga.descricao}": equipamento fixo a ${d}m da banheira/box — normal para chuveiro/aquecedor (Volume 1); confirme grau de proteção IP adequado ao local.`,
+          norma: `${N} §9.1`,
+        })
+      }
+      continue
+    }
+
+    if (carga.tipo === 'ILUM') {
+      // Luminária: a norma também limita por ALTURA (Volume 1 vai só
+      // até 2,25m) — não pedimos altura para não recriar a complexidade
+      // que estamos evitando, então avisamos em vez de bloquear.
+      if (dentroZonaRestrita) {
+        resultados.push(aviso(
+          'NBR5410.9.1.ILUMproxima',
+          `"${carga.descricao}": luminária a ${d}m da banheira/box (< 0,60m). Se instalada a mais de 2,25m de altura (ex: teto), está fora da zona restrita e este aviso não se aplica. Se estiver mais baixa (ex: arandela), exige isolação Classe II.`,
+          `${N} §9.1`, d, LIMITE_VOL_RESTRITO_M
+        ))
+      }
+      continue
+    }
+
+    // TUG e GERAL — tratamento conservador: qualquer tomada/ponto não
+    // classificado dentro da zona restrita é bloqueado.
+    if (dentroZonaRestrita) {
       resultados.push(erro(
-        `NBR5410.9.1.Volume${vol}`,
-        `"${carga.descricao}": ${tipo_ponto} declarado no Volume ${vol.slice(1)} — não permitido equipamento elétrico padrão nesta zona (só equipamento fixo apropriado, ex: o próprio chuveiro, com IP adequado)`,
-        `${N} §9.1 — Volume ${vol.slice(1)}`,
-        `Reposicione o ponto para fora do Volume ${vol.slice(1)}, ou verifique se este é realmente um equipamento fixo apropriado à zona (não uma tomada/interruptor comum).`
+        'NBR5410.9.1.TomadaProxima',
+        `"${carga.descricao}": tomada a ${d}m da banheira/box (< 0,60m) — não permitida nesta zona (Volumes 0/1/2)`,
+        `${N} §9.1`,
+        `Reposicione a tomada para no mínimo 0,60m da banheira/box (recomendado: 3,00m para ficar totalmente fora da zona de restrição especial).`
       ))
-    } else if (vol === 'V2' && carga.tipo === 'TUG') {
-      resultados.push(erro(
-        'NBR5410.9.1.VolumeV2',
-        `"${carga.descricao}": tomada declarada no Volume 2 — tomada padrão não é permitida nesta zona (exceção: tomada de barbear com transformador de isolamento, não coberta por este sistema)`,
-        `${N} §9.1 — Volume 2`,
-        'Reposicione a tomada para o Volume 3 ou fora dos volumes (recomendado: mínimo 0,60m da banheira/box).'
-      ))
-    } else if (vol === 'V3') {
+    } else if (emVolume3) {
       resultados.push({
-        codigo: 'NBR5410.9.1.VolumeV3', conforme: true, severidade: 'info',
-        descricao: `"${carga.descricao}": no Volume 3 — permitido com IDR 30mA (já obrigatório para este cômodo)`,
+        codigo: 'NBR5410.9.1.Volume3', conforme: true, severidade: 'info',
+        descricao: `"${carga.descricao}": a ${d}m da banheira/box (Volume 3) — permitido com IDR 30mA (já obrigatório para este cômodo)`,
         norma: `${N} §9.1 — Volume 3`,
       })
     }

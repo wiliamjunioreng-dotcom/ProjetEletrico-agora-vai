@@ -269,7 +269,7 @@ export function Comodos() {
   const [formCarga, setFormCarga] = useState({
     tipo: 'TUG' as 'ILUM'|'TUG'|'TUE'|'GERAL',
     descricao: '', potencia_va: 100, qtd: 1, fase: 'mono' as 'mono'|'bi'|'tri',
-    volume_banheiro: 'fora' as 'V0'|'V1'|'V2'|'V3'|'fora',
+    distancia_box_m: '' as string | number,
   })
   const [lumModalComodo, setLumModalComodo] = useState<string | null>(null)
   const [form,     setForm]     = useState<Form>(EMPTY)
@@ -1061,14 +1061,12 @@ export function Comodos() {
                       <span style={{ color:'var(--text4)' }}>{cm.tipo}</span> {cm.descricao}
                       <span style={{ color:'var(--text4)', marginLeft:5 }}>{cm.qtd}×{cm.potencia_va}VA</span>
                       {cm.abaixo_nbr && <span style={{ color:'var(--amber)', marginLeft:4, fontSize:9 }}>⚠ abaixo NBR</span>}
-                      {(cm as any).volume_banheiro && (cm as any).volume_banheiro !== 'fora' && (
+                      {(cm as any).distancia_box_m !== undefined && (
                         <span style={{
-                          color: ['V0','V1'].includes((cm as any).volume_banheiro) ? 'var(--red)'
-                               : (cm as any).volume_banheiro === 'V2' && cm.tipo === 'TUG' ? 'var(--red)'
-                               : 'var(--text4)',
+                          color: (cm as any).distancia_box_m < 0.6 && ['TUG','GERAL'].includes(cm.tipo) ? 'var(--red)' : 'var(--text4)',
                           marginLeft:4, fontSize:9, fontWeight:700,
                         }}>
-                          · Vol.{(cm as any).volume_banheiro.slice(1)}
+                          · {(cm as any).distancia_box_m}m do box
                         </span>
                       )}
                     </span>
@@ -1077,20 +1075,23 @@ export function Comodos() {
                   </div>
                 ))}
                 {c.tipo === 'Banho' && (
-                  <div style={{ marginTop:6, marginBottom:2 }}>
-                    <label style={{ fontSize:9, color:'var(--text4)', display:'block', marginBottom:2 }}
-                      title="NBR 5410 §9.1 — restringe o tipo de equipamento permitido conforme a proximidade com a fonte de água">
-                      Zona (Volume 0-3, distância à banheira/box)
-                    </label>
-                    <select value={formCarga.volume_banheiro}
-                      onChange={e => setFormCarga(f => ({ ...f, volume_banheiro: e.target.value as any }))}
-                      style={{ fontSize:10, padding:'4px 6px', width:'100%', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:4 }}>
-                      <option value="fora">Fora dos volumes (recomendado p/ tomadas)</option>
-                      <option value="V3">Volume 3 — até ~3,00m (tomada OK c/ IDR)</option>
-                      <option value="V2">Volume 2 — até 0,60m (tomada NÃO permitida)</option>
-                      <option value="V1">Volume 1 — acima da banheira/box (só equip. fixo)</option>
-                      <option value="V0">Volume 0 — dentro da banheira/box (só SELV≤12V)</option>
-                    </select>
+                  <div style={{ marginTop:6, marginBottom:2, display:'flex', alignItems:'center', gap:6 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize:9, color:'var(--text4)', display:'block', marginBottom:2 }}
+                        title="NBR 5410 §9.1 — restringe o tipo de equipamento permitido conforme a proximidade com a fonte de água">
+                        Distância até a banheira/box (m) — opcional
+                      </label>
+                      <input className="finput" type="number" min={0} step={0.1}
+                        placeholder="ex: 0,3"
+                        value={formCarga.distancia_box_m}
+                        onChange={e => setFormCarga(f => ({ ...f, distancia_box_m: e.target.value === '' ? '' : parseFloat(e.target.value) }))}
+                        style={{ fontSize:10, width:'100%' }} />
+                    </div>
+                    {typeof formCarga.distancia_box_m === 'number' && formCarga.distancia_box_m < 0.6 && ['TUG','GERAL'].includes(formCarga.tipo) && (
+                      <span style={{ fontSize:9, color:'var(--red)', fontWeight:700, maxWidth: 140 }}>
+                        ⛔ &lt;0,60m — tomada não permitida aqui (§9.1)
+                      </span>
+                    )}
                   </div>
                 )}
                 <div style={{ display:'grid', gridTemplateColumns:'56px 1fr 64px 36px 36px auto', gap:4, alignItems:'end', marginTop:6 }}>
@@ -1123,9 +1124,10 @@ export function Comodos() {
                         tipo: formCarga.tipo, descricao: formCarga.descricao || `${formCarga.tipo} ${c.nome}`,
                         potencia_va: formCarga.potencia_va, qtd: formCarga.qtd, fase: formCarga.fase,
                         abaixo_nbr: formCarga.potencia_va * formCarga.qtd < nbr, nbr_min_va: nbr,
-                        ...(c.tipo === 'Banho' ? { volume_banheiro: formCarga.volume_banheiro } : {}),
+                        ...(c.tipo === 'Banho' && typeof formCarga.distancia_box_m === 'number'
+                              ? { distancia_box_m: formCarga.distancia_box_m } : {}),
                       })
-                      setFormCarga(f => ({ ...f, descricao:'', potencia_va:100, qtd:1, volume_banheiro:'fora' }))
+                      setFormCarga(f => ({ ...f, descricao:'', potencia_va:100, qtd:1, distancia_box_m:'' }))
                     }}>+</button>
                 </div>
               </div>
