@@ -10,6 +10,7 @@ import type {
 } from '../types/electrical'
 import type { CircuitoV3 } from '../types/electrical'
 import { getAreaExterna, AREA_INTERNA_ELETRODUTO } from './nbr5410tablesExport'
+import { limiteOcupacaoPct } from './eletroduto'
 
 // ── 1. Construir condutores automáticos por segmento ─────────────
 // Dado um segmento e os circuitos que passam por ele,
@@ -54,12 +55,18 @@ export function analisarSegmento(
   const taxa       = area_int > 0 ? (area_total / area_int) * 100 : 0
   const n_circuitos = circuitos_unicos.size
 
-  // Status de ocupação — NBR 5410 §6.2.11
+  // Limite de ocupação — NBR 5410 §6.2.11.1.6, por número de CONDUTORES
+  // (não circuitos): 1 condutor→53% | 2→31% | 3+→40%. O caso típico
+  // de 1 circuito monofásico completo (F+N+PE) já tem 3 condutores,
+  // cujo limite correto é 40% — não os 53% que a regra antiga aplicava
+  // para "1 circuito".
+  const n_condutores_total = segmento.condutores.length
+  const limite = limiteOcupacaoPct(n_condutores_total)
   const status_ocupacao: 'OK'|'LIMITE'|'EXCEDIDO' =
-    taxa <= 30 ? 'OK' : taxa <= 35 ? 'LIMITE' : 'EXCEDIDO'
+    taxa <= limite * 0.9 ? 'OK' : taxa <= limite ? 'LIMITE' : 'EXCEDIDO'
 
   if (status_ocupacao === 'EXCEDIDO') {
-    violacoes.push(`Ocupação ${taxa.toFixed(1)}% > 35% — NBR 5410 §6.2.11`)
+    violacoes.push(`Ocupação ${taxa.toFixed(1)}% > ${limite}% (${n_condutores_total} condutor(es)) — NBR 5410 §6.2.11.1.6`)
   }
 
   // §6.2.11.3 — máximo 3 curvas de 90° (270° total) entre duas caixas
@@ -87,6 +94,7 @@ export function analisarSegmento(
     area_condutores_mm2:   Math.round(area_total * 10) / 10,
     area_interna_mm2:      area_int,
     taxa_ocupacao_pct:     Math.round(taxa * 10) / 10,
+    limite_ocupacao_pct:   limite,
     status_ocupacao,
     n_circuitos_distintos: n_circuitos,
     fa_resultante:         fa,

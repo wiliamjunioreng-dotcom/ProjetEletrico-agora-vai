@@ -42,20 +42,26 @@ export function quedaTensao(ctx: CircuitoContext): ResultadoNorma[] {
 }
 
 // §6.2.11 — Ocupação máxima de eletroduto (35%)
+// BUG CORRIGIDO: usava limite fixo 35%/30% independente de quantos
+// condutores estão no eletroduto. NBR 5410 §6.2.11.1.6 varia o limite
+// por número de condutores (1→53% | 2→31% | 3+→40%) — um único
+// circuito monofásico completo (F+N+PE) já tem 3 condutores, cujo
+// limite correto é 40%, não os 35% que esta função aplicava.
 export function ocupacaoEletroduto(ctx: SegmentoContext): ResultadoNorma[] {
-  const norma = `${N6} §6.2.11 — ocupação máxima do eletroduto = 35%`
-  if (ctx.taxa_ocupacao_pct > 35) {
+  const limite = ctx.limite_ocupacao_pct
+  const norma  = `${N6} §6.2.11.1.6 — ocupação máxima do eletroduto (varia por nº de condutores)`
+  if (ctx.taxa_ocupacao_pct > limite) {
     return [R.erro(
-      'NBR5410.6.2.11',
-      `Ocupação ${ctx.taxa_ocupacao_pct.toFixed(1)}% > 35%`,
-      norma, ctx.taxa_ocupacao_pct, 35
+      'NBR5410.6.2.11.1.6',
+      `Ocupação ${ctx.taxa_ocupacao_pct.toFixed(1)}% > ${limite}%`,
+      norma, ctx.taxa_ocupacao_pct, limite
     )]
   }
-  if (ctx.taxa_ocupacao_pct > 30) {
+  if (ctx.taxa_ocupacao_pct > limite * 0.9) {
     return [R.aviso(
-      'NBR5410.6.2.11',
-      `Ocupação ${ctx.taxa_ocupacao_pct.toFixed(1)}% — próxima do limite (35%)`,
-      norma, ctx.taxa_ocupacao_pct, 35
+      'NBR5410.6.2.11.1.6',
+      `Ocupação ${ctx.taxa_ocupacao_pct.toFixed(1)}% — próxima do limite (${limite}%)`,
+      norma, ctx.taxa_ocupacao_pct, limite
     )]
   }
   return []

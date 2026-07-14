@@ -233,6 +233,7 @@ export function solve(dominio: DominioDeclarativo): EstadoCalculado {
       area_interna_mm2: analise.area_interna_mm2,
       area_condutores_mm2: analise.area_condutores_mm2,
       taxa_ocupacao_pct: analise.taxa_ocupacao_pct,
+      limite_ocupacao_pct: analise.limite_ocupacao_pct,
       n_circuitos: analise.n_circuitos_distintos,
       fa_resultante: analise.fa_resultante,
     }

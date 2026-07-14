@@ -86,6 +86,11 @@ export interface SegmentoContext {
   readonly area_interna_mm2:    number
   readonly area_condutores_mm2: number
   readonly taxa_ocupacao_pct:   number
+  // Limite de ocupação aplicável — NBR 5410 §6.2.11.1.6 varia por
+  // número de condutores (53%/31%/40%), não é um valor fixo único.
+  // Calculado uma única vez em topologia.ts→analisarSegmento() e
+  // propagado aqui para a regra não duplicar a lógica pela 3ª vez.
+  readonly limite_ocupacao_pct: number
   readonly n_circuitos:         number
   readonly fa_resultante:       number
 }

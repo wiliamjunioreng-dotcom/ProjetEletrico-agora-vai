@@ -238,12 +238,12 @@ export function Eletrodutos() {
       <div className={`kpi ${n_ok_seg === segmentos.length && segmentos.length > 0 ? 'ok' : ''}`}>
         <div className="kpi-lbl">Ocupação OK</div>
         <div className="kpi-val">{n_ok_seg}</div>
-        <div className="kpi-unit">≤ 30%</div>
+        <div className="kpi-unit">limite varia c/ nº condutores</div>
       </div>
       <div className={`kpi ${n_exc_seg > 0 ? 'err' : ''}`}>
         <div className="kpi-lbl">Excedidos</div>
         <div className="kpi-val">{n_exc_seg}</div>
-        <div className="kpi-unit">&gt; 35% — aumentar ⌀</div>
+        <div className="kpi-unit">acima do limite — aumentar ⌀</div>
       </div>
       <div className={`kpi ${n_erros > 0 ? 'err' : n_avisos > 0 ? 'warn' : nos.length > 0 ? 'ok' : ''}`}>
         <div className="kpi-lbl">Validação</div>
@@ -598,8 +598,8 @@ export function Eletrodutos() {
                         color: analise.status_ocupacao === 'LIMITE' ? 'var(--amber)' : 'var(--red)',
                       }}>
                         {analise.status_ocupacao === 'LIMITE'
-                          ? `⚠ ${analise.taxa_ocupacao_pct}% — próxima do limite NBR 5410 §6.2.11 (35%). Próximo: ⌀${DIAMETROS_NOMINAL[DIAMETROS_NOMINAL.indexOf(seg.diametro_mm as any)+1]??seg.diametro_mm}mm.`
-                          : `✗ ${analise.taxa_ocupacao_pct}% excede 35%. Use ⌀${DIAMETROS_NOMINAL[DIAMETROS_NOMINAL.indexOf(seg.diametro_mm as any)+1]??seg.diametro_mm}mm.`}
+                          ? `⚠ ${analise.taxa_ocupacao_pct}% — próxima do limite NBR 5410 §6.2.11.1.6 (${analise.limite_ocupacao_pct}% para ${seg.condutores.length} condutor(es)). Próximo: ⌀${DIAMETROS_NOMINAL[DIAMETROS_NOMINAL.indexOf(seg.diametro_mm as any)+1]??seg.diametro_mm}mm.`
+                          : `✗ ${analise.taxa_ocupacao_pct}% excede ${analise.limite_ocupacao_pct}% (${seg.condutores.length} condutor(es)). Use ⌀${DIAMETROS_NOMINAL[DIAMETROS_NOMINAL.indexOf(seg.diametro_mm as any)+1]??seg.diametro_mm}mm.`}
                       </div>
                     )}
                   </div>

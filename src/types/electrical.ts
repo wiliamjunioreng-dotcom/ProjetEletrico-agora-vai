@@ -438,10 +438,12 @@ export interface SegmentoEletroduto {
 }
 
 export interface AnaliseSegmento {
-  // Ocupação
+  // Ocupação — NBR 5410 §6.2.11.1.6, limite varia por nº de condutores
+  // (1→53% | 2→31% | 3+→40%), não é um valor fixo único.
   area_condutores_mm2:  number
   area_interna_mm2:     number
   taxa_ocupacao_pct:    number
+  limite_ocupacao_pct:  number
   status_ocupacao:      'OK'|'LIMITE'|'EXCEDIDO'
   // Agrupamento
   n_circuitos_distintos: number
