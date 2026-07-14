@@ -184,6 +184,9 @@ export interface Comodo {
   // no agrupamento automático padrão (por ordem de criação + limite
   // de 3 cômodos/800VA) — comportamento anterior preservado.
   grupo_circuito_ilum?: string
+  // Mesmo conceito, para TUG — cômodos fisicamente próximos podem
+  // dividir um circuito de tomadas de uso geral por economia de cabo.
+  grupo_circuito_tug?: string
 
   // Luminotécnico (opcional)
   lumino?: LuminoData

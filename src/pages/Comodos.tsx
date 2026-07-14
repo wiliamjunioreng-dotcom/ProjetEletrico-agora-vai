@@ -160,6 +160,7 @@ interface Form {
   perim:     string
   afluencia_publico: boolean
   grupo_circuito_ilum: string
+  grupo_circuito_tug: string
   // Iluminação
   ilum_modo: 'auto' | 'manual' | 'lampadas' | 'string'
   ilum_manual: string
@@ -171,7 +172,7 @@ interface Form {
 }
 
 const EMPTY: Form = {
-  nome: '', tipo: 'Social', area: '', perim: '', afluencia_publico: false, grupo_circuito_ilum: '',
+  nome: '', tipo: 'Social', area: '', perim: '', afluencia_publico: false, grupo_circuito_ilum: '', grupo_circuito_tug: '',
   ilum_modo: 'auto', ilum_manual: '', ilum_string: '',
   tug_modo:  'auto', tug_manual: '',
 }
@@ -418,6 +419,7 @@ export function Comodos() {
       pe_direito_m: 2.8,
       afluencia_publico: form.afluencia_publico,
       grupo_circuito_ilum: form.grupo_circuito_ilum.trim() || undefined,
+      grupo_circuito_tug: form.grupo_circuito_tug.trim() || undefined,
       tues: [],  // TUEs agora adicionados via cargas_manuais após criação
       // Passar os valores calculados explicitamente — o store vai respeitá-los
       ilum_va:      ilumEfetiva,
@@ -596,6 +598,15 @@ export function Comodos() {
                 </label>
                 <input className="finput" value={form.grupo_circuito_ilum}
                   onChange={e => setForm(f => ({ ...f, grupo_circuito_ilum: e.target.value }))}
+                  placeholder="ex: Ala Quartos" />
+              </div>
+
+              <div className="fgroup">
+                <label className="flabel" title="Mesma lógica do grupo de ILUM, para tomadas de uso geral. Cômodos com o mesmo nome de grupo dividem um único circuito de TUG.">
+                  Grupo de circuito TUG (opcional)
+                </label>
+                <input className="finput" value={form.grupo_circuito_tug}
+                  onChange={e => setForm(f => ({ ...f, grupo_circuito_tug: e.target.value }))}
                   placeholder="ex: Ala Quartos" />
               </div>
             </div>

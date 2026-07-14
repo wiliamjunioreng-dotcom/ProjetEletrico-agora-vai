@@ -357,10 +357,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { comodos, projeto } = get()
     if (!comodos.length) return
     const circs: RawCircuit[] = []
-    const fases: FaseType[] = projeto.sistema === 'Monofasico' ? ['R','R','R']
-                            : projeto.sistema === 'Trifasico'  ? ['R','S','T']
-                            : ['R','S','R']
-    let fi = 0
+    // BUG CORRIGIDO: existia um único contador `fi` compartilhado entre
+    // TODOS os blocos de geração (cargas manuais ILUM/TUG/TUE + ILUM
+    // automático + TUE automático), cada um usando arrays de fases de
+    // tamanho DIFERENTE (1 para trifásico, 2 para bifásico, 3 para
+    // monofásico em sistema trifásico). Misturar chamadas de tamanhos
+    // diferentes no mesmo contador desalinha a rotação — um circuito
+    // trifásico "consome" 1 passo do contador sem de fato precisar
+    // balancear R/S/T, deslocando a rotação dos circuitos seguintes.
+    // Como T é a 3ª fase da sequência, ela é a mais provável de ser
+    // pulada por esse desalinhamento. Também havia um array hardcoded
+    // ['R','S','R'] para sistema Bifásico — R com o dobro do peso de S.
+    // FIX: cada bloco de geração agora tem seu PRÓPRIO contador local,
+    // e todos usam fasesParaTipo() como única fonte de verdade — nunca
+    // mais um array de fases duplicado e potencialmente errado.
 
     // ── Cargas manuais declaradas pelo engenheiro ─────────────────
     // Quando o cômodo possui cargas_manuais[], usá-las diretamente
@@ -374,6 +384,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // GERAL também fica 1 circuito por entrada — tipo ambíguo demais
     // para agrupar com segurança.
     const comodos_com_cargas = comodos.filter(c => c.cargas_manuais?.length)
+    // Contadores de rotação de fase — UM POR TIPO (ILUM, TUG), fora do
+    // loop de cômodos para que a rotação R→S→T persista ENTRE cômodos
+    // diferentes (senão cada cômodo recomeçaria do zero e todos os
+    // primeiros circuitos de cada tipo cairiam sempre em R). Nunca
+    // compartilhado com TUE/GERAL nem com os blocos automáticos abaixo
+    // — cada bloco tem o seu, exatamente para não repetir o bug de
+    // desalinhamento corrigido nesta sessão.
+    const fiPorTipo = { ILUM: 0, TUG: 0 }
+    let fiOutras = 0  // TUE/GERAL das cargas manuais — contador próprio, separado de ILUM/TUG
+
     for (const co of comodos_com_cargas) {
       const ilumEntries = co.cargas_manuais.filter(cm => cm.tipo === 'ILUM')
       const tugEntries  = co.cargas_manuais.filter(cm => cm.tipo === 'TUG')
@@ -385,7 +405,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // final é a do PRIMEIRO item com maior exigência (tri > bi > mono)
       // — se qualquer carga do grupo precisar de mais fases, o circuito
       // inteiro precisa delas.
-      function agruparPorNatureza(entries: typeof ilumEntries, tipoLabel: string) {
+      function agruparPorNatureza(entries: typeof ilumEntries, tipoLabel: 'ILUM' | 'TUG') {
         if (entries.length === 0) return
         let grupo: typeof entries = []
         let grupoVA = 0
@@ -400,7 +420,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             id: crypto.randomUUID(),
             descricao: `${tipoLabel}: ${descricoes} (${co.nome})`,
             potencia_va: grupoVA,
-            fase: fasesDisp[fi++ % fasesDisp.length],
+            fase: fasesDisp[fiPorTipo[tipoLabel]++ % fasesDisp.length],
             ligacao,
             tipo: tipoLabel as 'ILUM' | 'TUG',
             comodo_id: co.id,
@@ -435,7 +455,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           id: crypto.randomUUID(),
           descricao: (cm.descricao || `${cm.tipo}: ${co.nome}`) + sufixoTipo,
           potencia_va: pot,
-          fase: fasesDisp[fi++ % fasesDisp.length],
+          fase: fasesDisp[fiOutras++ % fasesDisp.length],
           ligacao: ligacao as TipoLigacao,
           tipo: cm.tipo,
           comodo_id: co.id,
@@ -468,6 +488,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     //      criação, limite 3 cômodos/800VA). Continua existindo para
     //      quem não quer se preocupar com isso — é só uma heurística
     //      de conveniência, não substitui a decisão informada.
+    // Contador próprio do ILUM automático — persiste entre múltiplas
+    // chamadas (um grupo declarado por vez + o restante sem grupo),
+    // mas nunca compartilhado com nenhum outro bloco de geração.
+    let fiIlumAuto = 0
+    // Fases disponíveis via fasesParaTipo — mesma fonte de verdade
+    // usada em todo o resto do arquivo, nunca mais um array duplicado.
+    const fasesIlumAuto = fasesParaTipo('monofasica', projeto.sistema)
+
     function gerarCircuitosILUMDeGrupo(lista: typeof comodos_auto, rotuloGrupo?: string) {
       let grp: string[] = [], grpVA = 0, grpRealW = 0, grpId = '', grpComodos: string[] = []
       const flush = () => {
@@ -484,7 +512,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           lampadas:        lampGrupo.length > 0 ? lampGrupo : undefined,
           minimo_nbr_va:   grpVA,
           abaixo_minimo_nbr: false,
-          fase: fases[fi++ % 3],
+          fase: fasesIlumAuto[fiIlumAuto++ % fasesIlumAuto.length],
           comprimento_m: comprimentoEstimado(comodos.find(x => x.id === grpId)?.tipo ?? 'Sala', 'ILUM'),
           n_agrup: 1, tipo: 'ILUM', comodo_id: grpId,
         })
@@ -521,17 +549,64 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Resto cai no agrupamento automático de sempre
     gerarCircuitosILUMDeGrupo(semGrupo)
 
-    // TUG
-    fi = 0
-    comodos_auto.filter(c => c.tug_va > 0).forEach(c => {
-      circs.push({
-        id: crypto.randomUUID(), descricao: `TUG: ${c.nome}`,
-        potencia_va: c.tug_va, fase: fases[fi++ % 3], ligacao: 'monofasica' as TipoLigacao,
-        comprimento_m: comprimentoEstimado(c.tipo, 'TUG'), n_agrup: 1, tipo: 'TUG', comodo_id: c.id,
-      })
-    })
+    // TUG — mesmo padrão de agrupamento por rótulo declarado que já
+    // existe para ILUM: cômodos com o MESMO grupo_circuito_tug dividem
+    // um único circuito (economia de cabo, decisão do engenheiro que
+    // vê a planta); sem rótulo, cai no comportamento original (1
+    // circuito por cômodo — nunca agrupado automaticamente, porque o
+    // sistema não sabe quais cômodos são fisicamente próximos).
+    let fiTugAuto = 0
+    const fasesTugAuto = fasesParaTipo('monofasica', projeto.sistema)
 
-    // TUE
+    function gerarCircuitosTUGDeGrupo(lista: typeof comodos_auto, rotuloGrupo?: string) {
+      let grp: string[] = [], grpVA = 0, grpId = '', grpComodos: string[] = []
+      const flush = () => {
+        if (grp.length === 0) return
+        circs.push({
+          id: crypto.randomUUID(),
+          descricao: `TUG: ${grp.join(', ')}${rotuloGrupo ? ` [${rotuloGrupo}]` : ''}`,
+          potencia_va: grpVA,
+          fase: fasesTugAuto[fiTugAuto++ % fasesTugAuto.length],
+          ligacao: 'monofasica' as TipoLigacao,
+          comprimento_m: comprimentoEstimado(comodos.find(x => x.id === grpId)?.tipo ?? 'Sala', 'TUG'),
+          n_agrup: 1, tipo: 'TUG', comodo_id: grpId,
+        })
+        grp = []; grpVA = 0; grpId = ''; grpComodos = []
+      }
+      lista.forEach(c => {
+        // Só agrupa automaticamente (rótulo declarado) até o mesmo teto
+        // de 800VA/3 cômodos usado no ILUM — heurística de economia, não
+        // regra normativa (a norma não define VA máximo por circuito;
+        // isso vem do cabo/disjuntor escolhido, dimensionado à parte).
+        if (rotuloGrupo && (grp.length >= 3 || grpVA + c.tug_va > 800)) flush()
+        grp.push(c.nome); grpVA += c.tug_va
+        grpId = c.id; grpComodos.push(c.id)
+        // Sem rótulo: cada cômodo continua virando seu próprio circuito
+        // (comportamento original preservado) — flush imediato.
+        if (!rotuloGrupo) flush()
+      })
+      flush()
+    }
+
+    const comodosComTug = comodos_auto.filter(c => c.tug_va > 0)
+    const gruposTugDeclarados = new Map<string, typeof comodos_auto>()
+    const semGrupoTug: typeof comodos_auto = []
+    comodosComTug.forEach(c => {
+      const rotulo = (c as any).grupo_circuito_tug?.trim()
+      if (rotulo) {
+        if (!gruposTugDeclarados.has(rotulo)) gruposTugDeclarados.set(rotulo, [])
+        gruposTugDeclarados.get(rotulo)!.push(c)
+      } else {
+        semGrupoTug.push(c)
+      }
+    })
+    for (const [rotulo, lista] of gruposTugDeclarados) {
+      gerarCircuitosTUGDeGrupo(lista, rotulo)
+    }
+    gerarCircuitosTUGDeGrupo(semGrupoTug)
+
+    // TUE (array legado tues[]) — contador próprio, isolado dos demais
+    let fiTueAuto = 0
     comodos_auto.forEach(c => {
       ;(c.tues ?? []).forEach(t => {
         // Ligação: respeita a seleção EXPLÍCITA do engenheiro (t.fase_ligacao)
@@ -542,7 +617,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                        : t.fase_ligacao === 'mono' ? 'monofasica'
                        : inferirLigacao('TUE', t.potencia_va)
         const fasesDisp = fasesParaTipo(ligacao, projeto.sistema)
-        const fase: FaseType = fasesDisp[fi++ % fasesDisp.length]
+        const fase: FaseType = fasesDisp[fiTueAuto++ % fasesDisp.length]
         // Comprimento estimado pelo tipo de ambiente (refinável pelo engenheiro)
         const comp = c.tipo === 'Externo' || c.tipo === 'Garagem' ? 20 : 12
         // Anexar tipo_carga à descrição como palavra-chave para inferirCurva()
