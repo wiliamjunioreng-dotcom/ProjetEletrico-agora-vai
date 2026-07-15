@@ -170,7 +170,7 @@ html, body, #root {
    padrão exato do LumenSolar (mesma marca, mesma empresa) */
 .sidebar-logo {
   padding: 20px 20px 20px; border-bottom: 1px solid #1e2030;
-  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
   flex-shrink: 0;
 }
 .sidebar-logo-badge {
@@ -267,13 +267,8 @@ html, body, #root {
 }
 .sb-config-btn:hover { background: #1e2030; color: #c4bfd6; }
 
-/* ── Content — área principal, com barra de ações LOCAL no topo ──── */
+/* ── Content — cada página traz seu próprio page-header ──────────── */
 .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
-.content-actionbar {
-  background: var(--surface); border-bottom: 1px solid var(--border);
-  padding: 8px 24px; display: flex; align-items: center; gap: 12px;
-  flex-shrink: 0; min-width: 0;
-}
 
 
 /* ── Page header ──────────────────────────────────────────────────── */

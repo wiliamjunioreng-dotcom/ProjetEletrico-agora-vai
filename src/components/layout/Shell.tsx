@@ -120,12 +120,25 @@ export function Shell({ children }: { children: ReactNode }) {
       {/* ── Sidebar — altura total, sem topbar separada ───────────── */}
       <div className="sidebar">
 
-        <div className="sidebar-logo" onClick={() => setPagina('dashboard')}>
-          <div className="sidebar-logo-badge">L</div>
-          <div>
-            <div className="sidebar-logo-text-main">LUMEN</div>
-            <div className="sidebar-logo-text-sub">PROJETO ELÉTRICO</div>
+        <div className="sidebar-logo">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flex: 1, minWidth: 0 }}
+            onClick={() => setPagina('dashboard')}>
+            <div className="sidebar-logo-badge">L</div>
+            <div>
+              <div className="sidebar-logo-text-main">LUMEN</div>
+              <div className="sidebar-logo-text-sub">PROJETO ELÉTRICO</div>
+            </div>
           </div>
+          <button onClick={toggleTheme}
+            title={theme === 'light' ? 'Tema escuro' : 'Tema claro'}
+            style={{
+              width: 26, height: 26, borderRadius: 'var(--r)', flexShrink: 0,
+              border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.045)',
+              color: 'var(--sb-text)', cursor: 'pointer', fontSize: 12,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+            {theme === 'light' ? '◐' : '◑'}
+          </button>
         </div>
 
         {/* Stepper do fluxo principal */}
@@ -184,35 +197,27 @@ export function Shell({ children }: { children: ReactNode }) {
               </div>
             </div>
           </div>
-          <button className="sb-config-btn" onClick={handleNovo}>
+          {/* Ações de arquivo — agrupadas num só lugar, não espalhadas
+              pela tela toda. lastSaved mostrado aqui, junto da ação que
+              o gerou, não numa segunda barra em cima do conteúdo. */}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="sb-config-btn" style={{ flex: 1 }} onClick={handleAbrir}>Abrir</button>
+            <button className="sb-config-btn" style={{ flex: 1 }} onClick={() => doSave()}>Salvar</button>
+          </div>
+          <button className="sb-config-btn" style={{ marginTop: 6 }} onClick={handleNovo}>
             <span>+</span> Novo projeto
           </button>
+          {lastSaved && (
+            <div style={{ fontSize: 9.5, color: 'var(--sb-label)', marginTop: 6, textAlign: 'center', fontFamily: 'var(--mono)' }}>
+              salvo às {lastSaved}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── Content — barra de ações local + página ────────────────── */}
+      {/* ── Content — cada página traz seu próprio page-header; o Shell
+          não empilha nenhuma barra em cima dele. ────────────────── */}
       <div className="content">
-        <div className="content-actionbar">
-          <span style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 600, flex: 1 }}>
-            {projeto.nome || 'Novo Projeto'}{modificado ? ' •' : ''}
-          </span>
-          {lastSaved && (
-            <span style={{ fontSize: 10.5, color: 'var(--text4)', fontFamily: 'var(--mono)' }}>
-              salvo {lastSaved}
-            </span>
-          )}
-          <button className="btn ghost" style={{ height: 28, fontSize: 11.5, padding: '0 10px' }} onClick={handleAbrir}>Abrir</button>
-          <button className="btn ghost" style={{ height: 28, fontSize: 11.5, padding: '0 10px' }} onClick={() => doSave()}>Salvar</button>
-          <button className="theme-toggle" onClick={toggleTheme}
-            title={theme === 'light' ? 'Tema escuro' : 'Tema claro'}
-            style={{ width: 28, height: 28, borderRadius: 'var(--r)', border: '1px solid var(--border2)',
-              background: 'var(--surface)', color: 'var(--text3)', cursor: 'pointer', fontSize: 13,
-              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {theme === 'light' ? '◐' : '◑'}
-          </button>
-          <button className="btn primary" style={{ height: 28, fontSize: 11.5, padding: '0 12px' }}
-            onClick={() => setPagina('qdfl')}>Exportar QDFL</button>
-        </div>
         {children}
       </div>
     </div>
