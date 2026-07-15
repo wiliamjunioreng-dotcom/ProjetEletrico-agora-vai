@@ -3,6 +3,7 @@ import { abrirPrancha as abrirPranchaInternal } from '../core/pranchaExport'
 
 import { useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
+import { api } from '../api'
 import {
   exportarQDFL_XLSX, exportarQDFL_CSV, exportarMemorial, exportarManualUsuario, exportarPlanoManutencao,
   exportarQDFL_Python, isServerMode
@@ -41,17 +42,31 @@ export function QDFL() {
     if (!validarParaExportacao()) return
     setExportando(true)
     try {
-      // Tentar via Python (server mode) — gera Excel idêntico ao modelo
+      // 1) App Electron real (.exe distribuído) — .xlsx NATIVO via IPC
+      // e a biblioteca xlsx de verdade no processo principal. Este é
+      // o caminho que os usuários reais rodam — antes era ignorado por
+      // completo, caindo direto no XML frágil abaixo (causa provável
+      // dos relatórios reportados como corrompidos no Excel).
+      if (api.isElectron) {
+        const ci = circuitos_calc.filter(c => c.potencia_va > 0)
+        const r = await api.exportQDFLExcel({ circuitos: ci, demanda })
+        if (r.ok) {
+          mostrarMsg(`Excel salvo em: ${r.path}`, 'ok')
+          return
+        }
+        console.warn('Export Electron falhou, tentando alternativas:', r.error)
+      }
+      // 2) Modo servidor local (pkg+Express, porta 3847) — Python
       if (isServerMode()) {
         const r = await exportarQDFL_Python(projeto, circuitos_calc, demanda)
         if (r.ok) {
           mostrarMsg(`Excel salvo em: ${r.path}`, 'ok')
           return
         }
-        // Fallback para XML se Python falhar
         console.warn('Python export falhou, usando XML:', r.error)
       }
-      // Fallback: XML do Excel 2003
+      // 3) Último recurso — navegador comum sem Electron/servidor local:
+      // XML do Excel 2003 (mais frágil, mas funciona sem backend nativo)
       exportarQDFL_XLSX(projeto as any, circuitos_calc, demanda)
       mostrarMsg('Excel baixado (formato XML — abre no Excel/LibreOffice)', 'ok')
     } catch (e) {

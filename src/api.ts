@@ -40,4 +40,23 @@ export const api = {
       return { files: [] }
     }
   },
+
+  // Verifica se está rodando dentro do Electron empacotado (.exe real
+  // distribuído via electron-builder) — diferente de isServerMode()
+  // em exporters.ts, que checa o modo pkg+Express (porta 3847), um
+  // sistema de empacotamento diferente que não é o usado pelo build
+  // atual do GitHub Actions.
+  isElectron,
+
+  // Exportar QDFL como .xlsx NATIVO (via IPC + biblioteca xlsx real no
+  // processo principal do Electron) — não é o fallback XML disfarçado
+  // de .xls, que é frágil e pode disparar aviso de "formato não
+  // corresponde" ou pior no Excel moderno.
+  async exportQDFLExcel(data: {
+    circuitos: any[]
+    demanda: any
+  }): Promise<{ ok: boolean; path?: string; error?: string }> {
+    if (!isElectron) return { ok: false, error: 'Exportação nativa só disponível no app Electron' }
+    return (window as any).electronAPI.exportQDFL(data)
+  },
 }
