@@ -436,17 +436,22 @@ export function Comodos() {
   }
 
   // Modos de entrada de iluminação
+  // Modo "Manual (VA)" removido — era a mesma função da carga manual
+  // pós-criação (cargas_manuais), só que menos capaz (1 valor sem nome,
+  // sem fase própria) e SUBSTITUÍDA SILENCIOSAMENTE assim que qualquer
+  // carga manual fosse adicionada depois — dois lugares fazendo a
+  // mesma coisa, sem indicação de qual estava valendo. Agora só existe
+  // um caminho pra sobrepor o cálculo automático: cargas manuais,
+  // sempre visível e nomeada, depois que o cômodo é criado.
   const MODOS_ILUM = [
     { id: 'auto',     label: 'Auto NBR' },
     { id: 'lampadas', label: 'Por luminária' },
     { id: 'string',   label: '"4×9W + 2×12W"' },
-    { id: 'manual',   label: 'Manual (VA)' },
   ] as const
 
   const MODOS_TUG = [
     { id: 'auto',    label: 'Auto NBR' },
     { id: 'tomadas', label: 'Por tomada' },
-    { id: 'manual',  label: 'Manual (VA)' },
   ] as const
 
   // Badge de comparação real vs. norma
@@ -951,6 +956,12 @@ export function Comodos() {
           const abaixoTug  = c.tug_va  < tugNBRc
           const violacoesNBR9 = verificarComodoNBR9(c).filter(v => !v.conforme)
           const errosNBR9 = violacoesNBR9.filter(v => v.severidade === 'erro' || v.severidade === 'fisico_critico')
+          // Indicador de fonte ativa — qual sistema está de fato valendo
+          // pra ILUM/TUG desse cômodo. Carga manual, quando existe pro
+          // tipo, SEMPRE substitui o valor calculado na criação — sem
+          // isso visível, ninguém sabe qual número está sendo usado.
+          const temIlumManual = (c.cargas_manuais ?? []).some(cm => cm.tipo === 'ILUM')
+          const temTugManual  = (c.cargas_manuais ?? []).some(cm => cm.tipo === 'TUG')
 
           return (
             <div key={c.id} className="card" style={{ position: 'relative', overflow: 'visible' }}>
@@ -1005,6 +1016,10 @@ export function Comodos() {
                     <div style={{ fontSize: 9, color: 'var(--text4)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '.04em' }}>ILUM dim.</div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: abaixoIlum ? 'var(--amber)' : 'var(--green)', fontFamily: 'var(--mono)' }}>{c.ilum_va}</div>
                     <div style={{ fontSize: 9, color: 'var(--text4)' }}>VA</div>
+                    <div style={{ fontSize: 8.5, marginTop: 1, color: temIlumManual ? 'var(--gold-dark)' : 'var(--text4)', fontWeight: temIlumManual ? 700 : 400 }}
+                      title={temIlumManual ? 'Este valor vem de carga(s) manual(is) declarada(s) — o cálculo automático abaixo é ignorado' : 'Calculado automaticamente'}>
+                      {temIlumManual ? '✎ carga manual' : 'auto'}
+                    </div>
                   </div>
                   {potReal > 0 && (
                     <div style={{ textAlign: 'center' }}>
@@ -1017,6 +1032,10 @@ export function Comodos() {
                     <div style={{ fontSize: 9, color: 'var(--text4)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '.04em' }}>TUG dim.</div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: abaixoTug ? 'var(--amber)' : 'var(--blue)', fontFamily: 'var(--mono)' }}>{c.tug_va}</div>
                     <div style={{ fontSize: 9, color: 'var(--text4)' }}>VA</div>
+                    <div style={{ fontSize: 8.5, marginTop: 1, color: temTugManual ? 'var(--gold-dark)' : 'var(--text4)', fontWeight: temTugManual ? 700 : 400 }}
+                      title={temTugManual ? 'Este valor vem de carga(s) manual(is) declarada(s) — o cálculo automático abaixo é ignorado' : 'Calculado automaticamente'}>
+                      {temTugManual ? '✎ carga manual' : 'auto'}
+                    </div>
                   </div>
                   {tueTot > 0 && (
                     <div style={{ textAlign: 'center' }}>
@@ -1054,105 +1073,151 @@ export function Comodos() {
                 </div>
               )}
 
-              {/* ── CARGAS MANUAIS ──────────────────────────────────── */}
-              <div style={{ padding: '8px 14px 10px', borderTop: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 9, color: 'var(--text4)', textTransform: 'uppercase', fontWeight: 600 }}>⚡ Cargas manuais</span>
-                </div>
-                {(c.cargas_manuais ?? []).map(cm => (
-                  <div key={cm.id} style={{ display:'flex', alignItems:'center', gap:6, padding:'3px 0', fontSize:11 }}>
-                    <span style={{ flex:1, color:'var(--text)' }}>
-                      <span style={{ color:'var(--text4)' }}>{cm.tipo}</span> {cm.descricao}
-                      <span style={{ color:'var(--text4)', marginLeft:5 }}>{cm.qtd}×{cm.potencia_va}VA</span>
-                      {cm.abaixo_nbr && <span style={{ color:'var(--amber)', marginLeft:4, fontSize:9 }}>⚠ abaixo NBR</span>}
-                      {(cm as any).distancia_box_m !== undefined && (
-                        <span style={{
-                          color: (cm as any).distancia_box_m < 0.6 && ['TUG','GERAL'].includes(cm.tipo) ? 'var(--red)' : 'var(--text4)',
-                          marginLeft:4, fontSize:9, fontWeight:700,
+              {/* ── CARGAS MANUAIS — redesenhado, sistema de design atual ── */}
+              <div style={{ padding: '14px 18px', borderTop: '1px solid var(--border-light)', background: 'var(--surface2)' }}>
+                <div className="flabel" style={{ marginBottom: 10 }}>Cargas manuais deste cômodo</div>
+
+                {(c.cargas_manuais ?? []).length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                    {(c.cargas_manuais ?? []).map(cm => {
+                      const badgeClasse = cm.tipo === 'ILUM' ? 'ilum' : cm.tipo === 'TUG' ? 'tug' : cm.tipo === 'TUE' ? 'tue' : 'idr'
+                      const distB = (cm as any).distancia_box_m
+                      return (
+                        <div key={cm.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '8px 12px', background: 'var(--surface)',
+                          border: '1px solid var(--border)', borderRadius: 'var(--r)',
                         }}>
-                          · {(cm as any).distancia_box_m}m do box
-                        </span>
-                      )}
-                    </span>
-                    <button style={{ fontSize:9, color:'var(--text4)', background:'none', border:'none', cursor:'pointer', padding:0 }}
-                      onClick={() => removeCargaManual(c.id, cm.id)}>✕</button>
+                          <span className={`badge ${badgeClasse}`}>{cm.tipo}</span>
+                          <span style={{ flex: 1, fontSize: 13, color: 'var(--text)', minWidth: 0,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {cm.descricao}
+                          </span>
+                          <span style={{ fontSize: 12.5, color: 'var(--text3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
+                            {cm.qtd}×{cm.potencia_va}VA
+                          </span>
+                          {cm.abaixo_nbr && (
+                            <span className="badge" style={{ background: 'var(--amber-dim)', color: 'var(--amber)', flexShrink: 0 }}>
+                              abaixo NBR
+                            </span>
+                          )}
+                          {distB !== undefined && (
+                            <span className="badge" style={{
+                              flexShrink: 0,
+                              background: distB < 0.6 && ['TUG','GERAL'].includes(cm.tipo) ? 'var(--red-dim)' : 'var(--surface3)',
+                              color: distB < 0.6 && ['TUG','GERAL'].includes(cm.tipo) ? 'var(--red)' : 'var(--text4)',
+                            }}>
+                              {distB}m do box
+                            </span>
+                          )}
+                          <button onClick={() => removeCargaManual(c.id, cm.id)}
+                            className="del-btn" style={{ opacity: 1, flexShrink: 0 }}>✕</button>
+                        </div>
+                      )
+                    })}
                   </div>
-                ))}
-                {c.tipo === 'Banho' && (
-                  <div style={{ marginTop:6, marginBottom:2, display:'flex', alignItems:'center', gap:6 }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ fontSize:9, color:'var(--text4)', display:'block', marginBottom:2 }}
-                        title="NBR 5410 §9.1 — restringe o tipo de equipamento permitido conforme a proximidade com a fonte de água">
-                        Distância até a banheira/box (m) — opcional
-                      </label>
-                      <input className="finput" type="number" min={0} step={0.1}
-                        placeholder="ex: 0,3"
-                        value={formCarga.distancia_box_m}
-                        onChange={e => setFormCarga(f => ({ ...f, distancia_box_m: e.target.value === '' ? '' : parseFloat(e.target.value) }))}
-                        style={{ fontSize:10, width:'100%' }} />
+                )}
+
+                {/* Formulário de adição — respiro e hierarquia de verdade */}
+                <div className="card" style={{ background: 'var(--surface)' }}>
+                  <div className="card-body" style={{ padding: 14 }}>
+                    <div className="form-grid c4" style={{ gap: 10 }}>
+                      <div className="fgroup">
+                        <label className="flabel">Tipo</label>
+                        <select className="fselect" value={formCarga.tipo}
+                          title="ILUM/TUG são agrupáveis com outras do mesmo tipo; cada TUE vira seu próprio circuito dedicado"
+                          onChange={e => setFormCarga(f => ({ ...f, tipo: e.target.value as any }))}>
+                          <option value="ILUM">ILUM</option>
+                          <option value="TUG">TUG</option>
+                          <option value="TUE">TUE</option>
+                          <option value="GERAL">Geral</option>
+                        </select>
+                      </div>
+                      <div className="fgroup" style={{ gridColumn: 'span 2' }}>
+                        <label className="flabel">Descrição</label>
+                        <input className="finput" placeholder="ex: Chuveiro elétrico" value={formCarga.descricao}
+                          onChange={e => setFormCarga(f => ({ ...f, descricao: e.target.value }))} />
+                      </div>
+                      <div className="fgroup">
+                        <label className="flabel">Fase</label>
+                        <select className="fselect" value={formCarga.fase}
+                          title="Ligação elétrica — bifásico usa 2 fases sem neutro, trifásico usa 3"
+                          onChange={e => setFormCarga(f => ({ ...f, fase: e.target.value as any }))}>
+                          <option value="mono">Monofásica (1φ)</option>
+                          <option value="bi">Bifásica (2φ)</option>
+                          <option value="tri">Trifásica (3φ)</option>
+                        </select>
+                      </div>
                     </div>
+
+                    <div className="form-grid c4" style={{ gap: 10, marginTop: 10 }}>
+                      <div className="fgroup">
+                        <label className="flabel">Potência (VA)</label>
+                        <input className="finput" type="number" min={1} step={50}
+                          value={formCarga.potencia_va}
+                          onChange={e => setFormCarga(f => ({ ...f, potencia_va: Number(e.target.value) }))} />
+                      </div>
+                      <div className="fgroup">
+                        <label className="flabel">Quantidade</label>
+                        <input className="finput" type="number" min={1} max={99}
+                          value={formCarga.qtd}
+                          onChange={e => setFormCarga(f => ({ ...f, qtd: Math.max(1, Number(e.target.value)) }))} />
+                      </div>
+                      {formCarga.tipo === 'TUE' && (
+                        <div className="fgroup">
+                          <label className="flabel">Tipo de carga</label>
+                          <select className="fselect" value={formCarga.tipo_carga}
+                            title="Define a curva do disjuntor — motor exige curva D, resistivo curva B"
+                            onChange={e => setFormCarga(f => ({ ...f, tipo_carga: e.target.value as any }))}>
+                            <option value="geral">Geral</option>
+                            <option value="resistivo">Resistivo</option>
+                            <option value="motor">Motor</option>
+                            <option value="ar_cond">Ar-condicionado</option>
+                          </select>
+                        </div>
+                      )}
+                      {c.tipo === 'Banho' && (
+                        <div className="fgroup">
+                          <label className="flabel" title="NBR 5410 §9.1 — restringe o equipamento permitido conforme a proximidade com água">
+                            Dist. até banheira/box (m)
+                          </label>
+                          <input className="finput" type="number" min={0} step={0.1} placeholder="ex: 0,3"
+                            value={formCarga.distancia_box_m}
+                            onChange={e => setFormCarga(f => ({ ...f, distancia_box_m: e.target.value === '' ? '' : parseFloat(e.target.value) }))} />
+                        </div>
+                      )}
+                      <div className="fgroup" style={{ justifyContent: 'flex-end' }}>
+                        <label className="flabel" style={{ opacity: 0 }}>Adicionar</label>
+                        <button className="btn primary" style={{ width: '100%' }}
+                          onClick={() => {
+                            const nbr = formCarga.tipo === 'ILUM' ? c.ilum_va : formCarga.tipo === 'TUG' ? c.tug_va : 0
+                            addCargaManual(c.id, {
+                              tipo: formCarga.tipo, descricao: formCarga.descricao || `${formCarga.tipo} ${c.nome}`,
+                              potencia_va: formCarga.potencia_va, qtd: formCarga.qtd, fase: formCarga.fase,
+                              abaixo_nbr: formCarga.potencia_va * formCarga.qtd < nbr, nbr_min_va: nbr,
+                              ...(formCarga.tipo === 'TUE' ? { tipo_carga: formCarga.tipo_carga } : {}),
+                              ...(c.tipo === 'Banho' && typeof formCarga.distancia_box_m === 'number'
+                                    ? { distancia_box_m: formCarga.distancia_box_m } : {}),
+                            })
+                            setFormCarga(f => ({ ...f, descricao: '', potencia_va: 100, qtd: 1, distancia_box_m: '' }))
+                          }}>
+                          + Adicionar
+                        </button>
+                      </div>
+                    </div>
+
                     {typeof formCarga.distancia_box_m === 'number' && formCarga.distancia_box_m < 0.6 && ['TUG','GERAL'].includes(formCarga.tipo) && (
-                      <span style={{ fontSize:9, color:'var(--red)', fontWeight:700, maxWidth: 140 }}>
-                        ⛔ &lt;0,60m — tomada não permitida aqui (§9.1)
-                      </span>
+                      <div className="toast-bar err" style={{ marginTop: 10 }}>
+                        ⛔ Menos de 0,60m — tomada não permitida nesta zona (NBR 5410 §9.1)
+                      </div>
+                    )}
+                    {formCarga.tipo === 'TUE' && (
+                      <div style={{ fontSize: 11, color: 'var(--text4)', marginTop: 10 }}>
+                        💡 Cada TUE vira seu próprio circuito dedicado — nunca é agrupado com outras cargas.
+                      </div>
                     )}
                   </div>
-                )}
-                <div style={{ display:'grid', gridTemplateColumns: formCarga.tipo === 'TUE' ? '56px 1fr 64px 36px 36px 64px auto' : '56px 1fr 64px 36px 36px auto', gap:4, alignItems:'end', marginTop:6 }}>
-                  <select value={formCarga.tipo}
-                    onChange={e => setFormCarga(f => ({ ...f, tipo: e.target.value as any }))}
-                    title="Tipo de carga: ILUM/TUG são agrupáveis com outras do mesmo tipo; cada TUE vira seu próprio circuito dedicado"
-                    style={{ fontSize:10, padding:'3px 4px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:4 }}>
-                    <option value="ILUM">ILUM</option><option value="TUG">TUG</option>
-                    <option value="TUE">TUE</option><option value="GERAL">Geral</option>
-                  </select>
-                  <input className="finput" placeholder="Descrição" value={formCarga.descricao}
-                    onChange={e => setFormCarga(f => ({ ...f, descricao: e.target.value }))}
-                    style={{ fontSize:10 }} />
-                  <input className="finput" type="number" min={1} step={50}
-                    value={formCarga.potencia_va} title="VA"
-                    onChange={e => setFormCarga(f => ({ ...f, potencia_va: Number(e.target.value) }))}
-                    style={{ fontSize:10, textAlign:'right' }} />
-                  <input className="finput" type="number" min={1} max={99}
-                    value={formCarga.qtd} title="Qtd"
-                    onChange={e => setFormCarga(f => ({ ...f, qtd: Math.max(1, Number(e.target.value)) }))}
-                    style={{ fontSize:10, textAlign:'center' }} />
-                  <select value={formCarga.fase}
-                    onChange={e => setFormCarga(f => ({ ...f, fase: e.target.value as any }))}
-                    title="Ligação elétrica — define quantas fases o circuito usa (bifásico = 2 fases, sem neutro)"
-                    style={{ fontSize:10, padding:'3px 2px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:4 }}>
-                    <option value="mono">1φ</option><option value="bi">2φ</option><option value="tri">3φ</option>
-                  </select>
-                  {formCarga.tipo === 'TUE' && (
-                    <select value={formCarga.tipo_carga}
-                      onChange={e => setFormCarga(f => ({ ...f, tipo_carga: e.target.value as any }))}
-                      title="Tipo de carga — define a curva do disjuntor (motor exige curva D, resistivo curva B)"
-                      style={{ fontSize:9.5, padding:'3px 2px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:4 }}>
-                      <option value="geral">Geral</option>
-                      <option value="resistivo">Resist.</option>
-                      <option value="motor">Motor</option>
-                      <option value="ar_cond">A/C</option>
-                    </select>
-                  )}
-                  <button className="btn primary" style={{ height:26, fontSize:10, padding:'0 6px' }}
-                    onClick={() => {
-                      const nbr = formCarga.tipo === 'ILUM' ? c.ilum_va : formCarga.tipo === 'TUG' ? c.tug_va : 0
-                      addCargaManual(c.id, {
-                        tipo: formCarga.tipo, descricao: formCarga.descricao || `${formCarga.tipo} ${c.nome}`,
-                        potencia_va: formCarga.potencia_va, qtd: formCarga.qtd, fase: formCarga.fase,
-                        abaixo_nbr: formCarga.potencia_va * formCarga.qtd < nbr, nbr_min_va: nbr,
-                        ...(formCarga.tipo === 'TUE' ? { tipo_carga: formCarga.tipo_carga } : {}),
-                        ...(c.tipo === 'Banho' && typeof formCarga.distancia_box_m === 'number'
-                              ? { distancia_box_m: formCarga.distancia_box_m } : {}),
-                      })
-                      setFormCarga(f => ({ ...f, descricao:'', potencia_va:100, qtd:1, distancia_box_m:'' }))
-                    }}>+</button>
                 </div>
-                {formCarga.tipo === 'TUE' && (
-                  <div style={{ fontSize: 9.5, color: 'var(--text4)', marginTop: 3 }}>
-                    💡 Cada TUE vira seu próprio circuito dedicado — não é agrupado com outras cargas.
-                  </div>
-                )}
               </div>
             </div>
           )

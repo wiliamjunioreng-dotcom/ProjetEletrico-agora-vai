@@ -1,6 +1,6 @@
 // Validação — faseDefault() agora balanceia, não fixa sempre em R
 import { describe, it, expect } from 'vitest'
-import { faseDefault, fasesParaTipo } from '../store/projectStore'
+import { faseDefault } from '../store/projectStore'
 
 describe('faseDefault — balanceamento ativo por fases já em uso', () => {
   it('Sem circuitos existentes → primeira disponível (comportamento inicial preservado)', () => {

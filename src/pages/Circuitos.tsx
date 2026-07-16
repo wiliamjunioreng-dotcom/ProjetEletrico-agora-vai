@@ -680,8 +680,11 @@ export function Circuitos() {
         })}>
           + Circuito
         </button>
-        <button className="btn primary" onClick={() => setPagina('balanceamento')} disabled={viewModels.length === 0}>
-          Balancear fases →
+        <button className="btn" onClick={() => setPagina('balanceamento')} disabled={viewModels.length === 0}>
+          Balancear fases
+        </button>
+        <button className="btn primary" onClick={() => setPagina('auditoria')} disabled={viewModels.length === 0}>
+          Ir para Auditoria →
         </button>
       </div>
     </div>
@@ -774,9 +777,13 @@ export function Circuitos() {
           border: '1px solid var(--green)', borderRadius: 5, fontSize: 11, color: 'var(--green)',
         }}>
           <strong>✓ Todos os circuitos conformes com a NBR 5410</strong>
-          <button className="btn success" style={{ marginLeft: 12, height: 24, fontSize: 10 }}
+          <button className="btn ghost" style={{ marginLeft: 12, height: 24, fontSize: 10 }}
             onClick={() => setPagina('balanceamento')}>
-            Balancear fases →
+            Conferir balanço de fases
+          </button>
+          <button className="btn success" style={{ marginLeft: 6, height: 24, fontSize: 10 }}
+            onClick={() => setPagina('auditoria')}>
+            Ir para Auditoria →
           </button>
         </div>
       )}
