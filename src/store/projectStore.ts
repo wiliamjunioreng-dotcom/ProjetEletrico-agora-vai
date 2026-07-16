@@ -83,9 +83,35 @@ export function inferirLigacao(tipo: string, potencia_va: number): TipoLigacao {
 }
 
 // Fase padrão para uma ligação
-export function faseDefault(ligacao: TipoLigacao, sistema: string): FaseType {
+// BUG CORRIGIDO: sempre retornava disponiveis[0] (sempre 'R'), nunca
+// rotacionava — desconectado da lógica de balanceamento usada na
+// geração em massa (gerarCircuitosDeComodos). Todo circuito criado ou
+// editado manualmente na tela Circuitos sempre voltava pra fase R,
+// fazendo a fase T (e S) nunca aparecerem na prática mesmo estando
+// disponíveis no seletor. Agora recebe as fases já em uso nos
+// circuitos existentes e escolhe a MENOS usada entre as disponíveis
+// para o tipo de ligação — balanceamento ativo, não estático.
+export function faseDefault(
+  ligacao: TipoLigacao,
+  sistema: string,
+  fasesExistentes: FaseType[] = []
+): FaseType {
   const disponiveis = fasesParaTipo(ligacao, sistema)
-  return disponiveis[0]
+  if (fasesExistentes.length === 0) return disponiveis[0]
+
+  const contagem = new Map<FaseType, number>()
+  disponiveis.forEach(f => contagem.set(f, 0))
+  fasesExistentes.forEach(f => {
+    if (contagem.has(f)) contagem.set(f, (contagem.get(f) ?? 0) + 1)
+  })
+
+  let melhor = disponiveis[0]
+  let menorContagem = contagem.get(melhor) ?? 0
+  for (const f of disponiveis) {
+    const c = contagem.get(f) ?? 0
+    if (c < menorContagem) { melhor = f; menorContagem = c }
+  }
+  return melhor
 }
 
 // Compatibilidade: retornar todas as fases do sistema (para páginas legadas)

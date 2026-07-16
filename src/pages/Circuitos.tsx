@@ -68,6 +68,12 @@ function CircuitoCard({
   const { composicao, resultado, execucao, violacoes, status } = vm
   const circuito_foco_id = useProjectStore(s => s.circuito_foco_id)
   const em_foco = circuito_foco_id === vm.id
+  // Fases dos OUTROS circuitos já existentes — usado para faseDefault()
+  // escolher a fase menos usada, não sempre R. Exclui o próprio circuito
+  // (evita que ele "vote" na própria fase ao recalcular seu default).
+  const fasesOutrosCircuitos = useProjectStore(s =>
+    s.circuitos_raw.filter(c => c.id !== raw.id).map(c => c.fase)
+  )
 
   return (
     <div className={vm.css_class} style={{
@@ -190,7 +196,7 @@ function CircuitoCard({
                 onChange={e => {
                   const tipo = e.target.value
                   const lig  = inferirLigacao(tipo, vm.params.potencia_va)
-                  const fase = faseDefault(lig, projeto.sistema)
+                  const fase = faseDefault(lig, projeto.sistema, fasesOutrosCircuitos)
                   onUpdateBatch(raw.id, { tipo, ligacao: lig, fase })
                 }}>
                 {TIPOS.map(t => <option key={t}>{t}</option>)}
@@ -202,7 +208,7 @@ function CircuitoCard({
                 value={raw.ligacao ?? inferirLigacao(vm.params.tipo, vm.params.potencia_va)}
                 onChange={e => {
                   const lig = e.target.value as TipoLigacao
-                  const novaFase = faseDefault(lig, projeto.sistema)
+                  const novaFase = faseDefault(lig, projeto.sistema, fasesOutrosCircuitos)
                   onUpdateBatch(raw.id, { ligacao: lig, fase: novaFase })
                 }}>
                 <option value="monofasica">Monofásico — 1 fase</option>
@@ -243,7 +249,7 @@ function CircuitoCard({
                   const va = parseFloat(e.target.value) || 0
                   if (vm.params.tipo === 'TUE') {
                     const lig  = inferirLigacao('TUE', va)
-                    const fase = faseDefault(lig, projeto.sistema)
+                    const fase = faseDefault(lig, projeto.sistema, fasesOutrosCircuitos)
                     onUpdateBatch(raw.id, { potencia_va: va, ligacao: lig, fase })
                   } else {
                     onUpdate(raw.id, 'potencia_va', va)
