@@ -155,45 +155,73 @@ export function QDFL() {
     )}
     <div className="page-header">
       <div>
-        <div className="page-title">Quadro de Distribuição QDFL</div>
-        <div className="page-sub">
-          Passo 6 de 6 — Exportar Excel (modelo NBR 5410), CSV ou Memorial para PDF
-        </div>
+        <div className="page-title">Emissão — QDFL e Documentos</div>
+        <div className="page-sub">Passo 5 de 5 · Todo documento final do projeto sai daqui</div>
       </div>
       <div className="page-actions">
         {msg && (
-          <div style={{
-            fontSize: 11, padding: '5px 12px', borderRadius: 6,
-            background: msg.tipo==='ok' ? 'var(--green-dim)'
-                      : msg.tipo==='err' ? 'var(--red-dim)' : 'var(--blue-dim)',
-            border: `1px solid ${msg.tipo==='ok' ? 'var(--green)' : msg.tipo==='err' ? 'var(--red)' : 'var(--blue)'}`,
-            color: msg.tipo==='ok' ? 'var(--green)' : msg.tipo==='err' ? 'var(--red)' : 'var(--blue)',
-            maxWidth: 360,
-          }}>
+          <div className={`toast-bar ${msg.tipo === 'ok' ? 'ok' : msg.tipo === 'err' ? 'err' : 'info'}`} style={{ maxWidth: 360 }}>
             {msg.txt}
           </div>
         )}
-        <button className="btn" style={{ background:'var(--blue)', color:'white', fontWeight:600 }} onClick={handlePrancha}>
-          📋 Prancha PDF
-        </button>
-        <button className="btn" onClick={handleSalvar}>
-          💾 .projelec
-        </button>
-        <button className="btn" onClick={handleCSV}>
-          📊 CSV
-        </button>
         <button className="btn primary" onClick={handleXLS} disabled={exportando}>
-          {exportando ? '⏳ Gerando...' : '📗 Excel'}
+          {exportando ? '⏳ Gerando...' : '📗 Exportar Excel'}
         </button>
-        <button className="btn success" onClick={handleMemorial}>
-          📄 Memorial PDF
-        </button>
-        <button className="btn" onClick={handleManualUsuario} title="NBR 5410 §6.1.8.3 — documento para o usuário final da instalação">
-          📘 Manual do Usuário
-        </button>
-        <button className="btn" onClick={handlePlanoManutencao} title="Rotina recomendada de manutenção — boa prática geral, não citação normativa específica">
-          🔧 Plano de Manutenção
-        </button>
+      </div>
+    </div>
+
+    {/* Central de exportação — todos os documentos, agrupados por
+        função, com espaço de verdade (antes 7 botões espremidos numa
+        faixa de 56px de altura, vários ficavam cortados/invisíveis) */}
+    <div className="page-pad" style={{ paddingBottom: 0 }}>
+      <div className="card">
+        <div className="card-header">Documentos para exportar</div>
+        <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          <div>
+            <div className="flabel" style={{ marginBottom: 8 }}>Planilhas e dados</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn primary" onClick={handleXLS} disabled={exportando}>
+                {exportando ? '⏳ Gerando...' : '📗 Excel (modelo NBR 5410)'}
+              </button>
+              <button className="btn" onClick={handleCSV}>📊 CSV</button>
+              <button className="btn" onClick={handleSalvar}>💾 Salvar projeto (.projelec)</button>
+            </div>
+          </div>
+
+          <div>
+            <div className="flabel" style={{ marginBottom: 8 }}>Documentos técnicos (PDF)</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn success" onClick={handleMemorial}>📄 Memorial Descritivo</button>
+              <button className="btn" style={{ background: 'var(--blue)', color: '#fff', borderColor: 'var(--blue)' }} onClick={handlePrancha}>
+                📋 Prancha (para impressão)
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="flabel" style={{ marginBottom: 8 }}>Para entregar ao cliente</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn" onClick={handleManualUsuario} title="NBR 5410 §6.1.8.3 — documento para o usuário final da instalação">
+                📘 Manual do Usuário
+              </button>
+              <button className="btn" onClick={handlePlanoManutencao} title="Rotina recomendada de manutenção — boa prática geral, não citação normativa específica">
+                🔧 Plano de Manutenção
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="flabel" style={{ marginBottom: 8 }}>Outras peças do projeto</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn ghost" onClick={() => setPagina('unifilar')}>⚡ Diagrama Unifilar</button>
+              <button className="btn ghost" onClick={() => setPagina('materiais')}>📦 Lista de Materiais</button>
+              <button className="btn ghost" onClick={() => setPagina('art')}>📑 ART / Relatório</button>
+              <button className="btn ghost" onClick={() => setPagina('simbologia')}>📖 Legenda NBR 5444</button>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
 
