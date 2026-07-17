@@ -303,6 +303,7 @@ export function Comodos() {
   const [lampPreset, setLampPreset] = useState(0)
   const [lampQtd,    setLampQtd]    = useState('')
   const [lampPot,    setLampPot]    = useState('')
+  const [lampTipo,   setLampTipo]   = useState<'geral'|'efeito'>('geral')
   // Formulário de tomada
   const [tomPreset,  setTomPreset]  = useState(0)
   const [tomQtd,     setTomQtd]     = useState('')
@@ -391,11 +392,18 @@ export function Comodos() {
     const qtd = parseInt(lampQtd) || 0
     const pot = parseFloat(lampPot) || preset.pot
     if (qtd <= 0 || pot <= 0) return
+    // Lúmens reais do catálogo — se a potência foi customizada
+    // (diferente do preset), escala o fluxo proporcionalmente em vez
+    // de manter o lm do preset original (evita declarar lúmens de uma
+    // lâmpada de outra potência).
+    const lmEscalado = preset.pot > 0 ? Math.round(preset.lm * (pot / preset.pot)) : preset.lm
     setLampadas(prev => [...prev, {
       id: crypto.randomUUID(),
       descricao: preset.desc,
       qtd, pot_w: pot,
       pot_dim_w: pot * (FATOR_DIM[lampGrupo] ?? 1.5),
+      lm: lmEscalado,
+      tipo: lampTipo,
     }])
     setLampQtd('')
   }
@@ -687,7 +695,7 @@ export function Comodos() {
                     </select>
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '60px 70px 1fr auto', gap: 6, alignItems: 'end' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '50px 70px 84px 1fr auto', gap: 6, alignItems: 'end' }}>
                   <div className="fgroup" style={{ margin: 0 }}>
                     <label className="flabel" style={{ fontSize: 9 }}>Qtd</label>
                     <input className="finput" type="number" style={{ height: 28, padding: '0 6px', fontSize: 11 }}
@@ -698,8 +706,17 @@ export function Comodos() {
                     <input className="finput" type="number" style={{ height: 28, padding: '0 6px', fontSize: 11 }}
                       value={lampPot} onChange={e => setLampPot(e.target.value)} placeholder="9" min={0.5} />
                   </div>
+                  <div className="fgroup" style={{ margin: 0 }}>
+                    <label className="flabel" style={{ fontSize: 9 }}>Tipo</label>
+                    <select className="fselect" style={{ height: 28, padding: '0 6px', fontSize: 11 }}
+                      value={lampTipo} onChange={e => setLampTipo(e.target.value as any)}
+                      title="Geral = iluminação principal do ambiente. Efeito = realce (arandela, sanca, fita decorativa) — não substitui a geral.">
+                      <option value="geral">Geral</option>
+                      <option value="efeito">Efeito</option>
+                    </select>
+                  </div>
                   <div style={{ fontSize: 10, color: 'var(--text4)', alignSelf: 'center', paddingTop: 4 }}>
-                    {presetsDoGrupo[lampPreset]?.obs || `Fator dim.: ×${FATOR_DIM[lampGrupo] ?? 1.5}`}
+                    {presetsDoGrupo[lampPreset]?.obs || `${presetsDoGrupo[lampPreset]?.lm ?? '?'}lm · Fator dim.: ×${FATOR_DIM[lampGrupo] ?? 1.5}`}
                   </div>
                   <button className="btn primary" style={{ height: 28, padding: '0 12px', alignSelf: 'flex-end' }} onClick={addLampada}>+</button>
                 </div>
@@ -709,7 +726,17 @@ export function Comodos() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 2 }}>
                     {lampadas.map(l => (
                       <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '3px 8px', background: 'var(--surface2)', borderRadius: 4 }}>
+                        {l.tipo && (
+                          <span className="badge" style={{
+                            background: l.tipo === 'efeito' ? 'var(--purple-dim)' : 'var(--blue-dim)',
+                            color: l.tipo === 'efeito' ? 'var(--purple)' : 'var(--blue)',
+                            flexShrink: 0,
+                          }}>{l.tipo}</span>
+                        )}
                         <span style={{ flex: 1 }}>{l.qtd}× {l.descricao}</span>
+                        {l.lm !== undefined && (
+                          <span style={{ color: 'var(--text4)', fontFamily: 'var(--mono)', fontSize: 10 }}>{l.qtd * l.lm}lm</span>
+                        )}
                         <span style={{ color: 'var(--green)', fontWeight: 600, fontFamily: 'var(--mono)' }}>{l.qtd * l.pot_w}W</span>
                         <button onClick={() => setLampadas(p => p.filter(x => x.id !== l.id))}
                           style={{ background: 'none', border: 'none', color: 'var(--text4)', cursor: 'pointer', fontSize: 15 }}>×</button>

@@ -14,6 +14,10 @@ export interface LampadaReal {
   qtd:      number
   pot_w:    number    // potência real de cada unidade
   pot_dim_w?: number  // potência para dimensionamento (se diferente)
+  lm?:      number    // fluxo luminoso real de cada unidade (lúmens)
+  // Iluminação geral (uso principal do ambiente) vs de efeito
+  // (arandela, sanca, fita decorativa — realce, não a luz principal)
+  tipo?:    'geral' | 'efeito'
 }
 
 // ── Histórico de decisões do projeto ─────────────────────────────
