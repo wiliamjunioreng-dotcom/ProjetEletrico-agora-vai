@@ -675,7 +675,9 @@ export function Circuitos() {
       <div className="page-actions">
         <button className="btn" onClick={() => addCircuito({
           descricao: `Circuito ${circuitos_raw.filter(r => r.tipo !== 'RESERVA').length + 1}`,
-          tipo: 'TUG', fase: 'R', potencia_va: 0,
+          tipo: 'TUG',
+          fase: faseDefault('monofasica', projeto.sistema, circuitos_raw.map(r => r.fase)),
+          potencia_va: 0,
           comprimento_m: 15, n_agrup: 1,
         })}>
           + Circuito
