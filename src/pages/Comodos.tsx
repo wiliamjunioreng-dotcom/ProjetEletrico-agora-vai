@@ -4,7 +4,7 @@
 
 import { useState } from 'react'
 import { verificarComodoNBR9 } from '../core/rules/nbr5410_s9'
-import { useProjectStore } from '../store/projectStore'
+import { useProjectStore, sistemaSuportaLigacao } from '../store/projectStore'
 import type { Comodo } from '../types/electrical'
 import { CATALOGO_LUMINARIAS, ILUMINANCIAS_REF, calcularLumens } from '../core/luminotecnico'
 import type { LampadaReal } from '../store/projectStore'
@@ -275,7 +275,7 @@ function LuminariaSelector({
 
 
 export function Comodos() {
-  const { comodos, addComodo, updateComodo, removeComodo, addCargaManual, removeCargaManual, gerarCircuitosDeComodos, setPagina } = useProjectStore()
+  const { comodos, projeto, addComodo, updateComodo, removeComodo, addCargaManual, removeCargaManual, gerarCircuitosDeComodos, setPagina } = useProjectStore()
   const [formCarga, setFormCarga] = useState({
     tipo: 'TUG' as 'ILUM'|'TUG'|'TUE'|'GERAL',
     descricao: '', potencia_va: 100, qtd: 1, fase: 'mono' as 'mono'|'bi'|'tri',
@@ -1203,11 +1203,23 @@ export function Comodos() {
                           title="Ligação elétrica — bifásico usa 2 fases sem neutro, trifásico usa 3"
                           onChange={e => setFormCarga(f => ({ ...f, fase: e.target.value as any }))}>
                           <option value="mono">Monofásica (1φ)</option>
-                          <option value="bi">Bifásica (2φ)</option>
-                          <option value="tri">Trifásica (3φ)</option>
+                          <option value="bi" disabled={!sistemaSuportaLigacao(projeto.sistema, 'bifasica')}>
+                            Bifásica (2φ){!sistemaSuportaLigacao(projeto.sistema, 'bifasica') ? ' — indisponível' : ''}
+                          </option>
+                          <option value="tri" disabled={!sistemaSuportaLigacao(projeto.sistema, 'trifasica')}>
+                            Trifásica (3φ){!sistemaSuportaLigacao(projeto.sistema, 'trifasica') ? ' — indisponível' : ''}
+                          </option>
                         </select>
                       </div>
                     </div>
+
+                    {!sistemaSuportaLigacao(projeto.sistema, formCarga.fase === 'tri' ? 'trifasica' : formCarga.fase === 'bi' ? 'bifasica' : 'monofasica') && (
+                      <div className="toast-bar err" style={{ marginTop: 8 }}>
+                        ⛔ Projeto é <b>{projeto.sistema}</b> ({projeto.sistema === 'Monofasico' ? '1 fase disponível' : '2 fases disponíveis'}) —
+                        essa carga pede ligação {formCarga.fase === 'tri' ? 'trifásica (3 fases)' : 'bifásica (2 fases)'}, fisicamente impossível aqui.
+                        Ajuste a fase da carga ou o sistema do projeto.
+                      </div>
+                    )}
 
                     <div className="form-grid c4" style={{ gap: 10, marginTop: 10 }}>
                       <div className="fgroup">

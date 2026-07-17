@@ -66,9 +66,56 @@ export function fasesParaTipo(ligacao: TipoLigacao, sistema: string): FaseType[]
     if (sistema === 'Bifasico')   return ['RS']
     if (sistema === 'Trifasico')  return ['RS', 'ST', 'RT']
     return ['RS']                    // Monofasico não tem bifásico — fallback
+                                      // (ver sistemaSuportaLigacao — combinação
+                                      // impossível, deve ser bloqueada antes de
+                                      // chegar aqui, este fallback é só defesa)
   }
   // trifasica
   return ['RST']
+}
+
+// Verifica se o sistema do projeto (fases FISICAMENTE disponíveis na
+// entrada) suporta a ligação que uma carga específica exige. O sistema
+// é o "cardápio" de fases disponíveis; cada carga pede um subconjunto
+// dele — mas uma carga NUNCA pode pedir mais fases do que existem.
+// Monofásico só tem 1 fase → nenhuma carga bi/trifásica é fisicamente
+// possível ali. Bifásico tem 2 → aceita mono e bi, não tri. Trifásico
+// tem as 3 → aceita qualquer ligação.
+export function sistemaSuportaLigacao(sistema: string, ligacao: TipoLigacao): boolean {
+  if (ligacao === 'monofasica') return true
+  if (ligacao === 'bifasica')   return sistema === 'Bifasico' || sistema === 'Trifasico'
+  if (ligacao === 'trifasica')  return sistema === 'Trifasico'
+  return true
+}
+
+// Varre TODAS as cargas do projeto (manuais e TUEs legados) e retorna
+// as que pedem mais fases do que o sistema declarado realmente tem —
+// situação fisicamente impossível que hoje cai num fallback silencioso
+// em fasesParaTipo() sem avisar ninguém.
+export function verificarCompatibilidadeSistema(
+  comodos: { nome: string; cargas_manuais: { descricao: string; fase: 'mono'|'bi'|'tri' }[]; tues: { descricao: string; fase_ligacao?: 'mono'|'bi'|'tri' }[] }[],
+  sistema: string,
+): { comodo: string; carga: string; ligacaoPedida: string }[] {
+  const problemas: { comodo: string; carga: string; ligacaoPedida: string }[] = []
+  const paraLigacao = (f: 'mono'|'bi'|'tri'): TipoLigacao =>
+    f === 'tri' ? 'trifasica' : f === 'bi' ? 'bifasica' : 'monofasica'
+
+  for (const co of comodos) {
+    for (const cm of co.cargas_manuais ?? []) {
+      const lig = paraLigacao(cm.fase)
+      if (!sistemaSuportaLigacao(sistema, lig)) {
+        problemas.push({ comodo: co.nome, carga: cm.descricao, ligacaoPedida: cm.fase })
+      }
+    }
+    for (const t of co.tues ?? []) {
+      if (!t.fase_ligacao) continue
+      const lig = paraLigacao(t.fase_ligacao)
+      if (!sistemaSuportaLigacao(sistema, lig)) {
+        problemas.push({ comodo: co.nome, carga: (t as any).descricao ?? 'TUE', ligacaoPedida: t.fase_ligacao })
+      }
+    }
+  }
+  return problemas
 }
 
 // Inferir ligação pelo tipo e potência do circuito

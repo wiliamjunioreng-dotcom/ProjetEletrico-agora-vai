@@ -18,6 +18,7 @@ import { useMemo, useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import { buildAllViewModels } from '../store/circuitViewModel'
 import { verificarProjetoNBR9 } from '../core/rules/nbr5410_s9'
+import { verificarCompatibilidadeSistema } from '../store/projectStore'
 import { resolverCircuito } from '../core/pipeline'
 import type { CircuitoPipelined } from '../core/pipeline'
 
@@ -219,6 +220,22 @@ export default function Auditoria() {
           comodo: comodo_nome,
         })
       }
+    }
+
+    // 3b. Compatibilidade sistema × ligação — pega o caso de alguém
+    // mudar o sistema do projeto (Trifásico → Monofásico, por exemplo)
+    // DEPOIS de já ter cargas bi/trifásicas cadastradas. O aviso na
+    // hora de adicionar a carga (Comodos.tsx) só evita o problema na
+    // criação — essa checagem cobre o retroativo.
+    const incompativeis = verificarCompatibilidadeSistema(comodos as any, projeto.sistema)
+    for (const p of incompativeis) {
+      lista.push({
+        nivel: 'critico', categoria: 'Proteção',
+        titulo: 'Ligação impossível no sistema do projeto',
+        detalhe: `"${p.carga}" em ${p.comodo} pede ligação ${p.ligacaoPedida === 'tri' ? 'trifásica (3 fases)' : 'bifásica (2 fases)'}, mas o projeto é ${projeto.sistema} — fisicamente impossível.`,
+        norma: 'NBR 5410 — coerência física da instalação',
+        comodo: p.comodo,
+      })
     }
 
     // 4. Sugestões proativas
