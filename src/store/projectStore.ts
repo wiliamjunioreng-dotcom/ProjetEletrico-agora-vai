@@ -492,7 +492,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // — cada bloco tem o seu, exatamente para não repetir o bug de
     // desalinhamento corrigido nesta sessão.
     const fiPorTipo = { ILUM: 0, TUG: 0 }
-    let fiOutras = 0  // TUE/GERAL das cargas manuais — contador próprio, separado de ILUM/TUG
+    // BUG CORRIGIDO: contador único compartilhado entre TUE mono/bi/tri
+    // — mesmo padrão de desalinhamento já corrigido em outros 3 lugares
+    // desta sessão, nunca tinha sido aplicado aqui. Um TUE trifásico
+    // (fasesDisp de tamanho 1) "consumia" um passo do contador
+    // compartilhado sem precisar balancear nada, deslocando a rotação
+    // dos TUEs bifásicos seguintes — no teste da casa completa isso
+    // fez a rotação bifásica nunca alcançar RT (só RS e ST apareceram).
+    // FIX: um contador POR ligação, igual ao padrão já usado em
+    // agruparPorNatureza (ILUM/TUG).
+    const fiOutrasPorLigacao = { monofasica: 0, bifasica: 0, trifasica: 0 }
 
     for (const co of comodos_com_cargas) {
       const ilumEntries = co.cargas_manuais.filter(cm => cm.tipo === 'ILUM')
@@ -575,7 +584,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           id: crypto.randomUUID(),
           descricao: (cm.descricao || `${cm.tipo}: ${co.nome}`) + sufixoTipo,
           potencia_va: pot,
-          fase: fasesDisp[fiOutras++ % fasesDisp.length],
+          fase: fasesDisp[fiOutrasPorLigacao[ligacao as TipoLigacao]++ % fasesDisp.length],
           ligacao: ligacao as TipoLigacao,
           tipo: cm.tipo,
           comodo_id: co.id,
