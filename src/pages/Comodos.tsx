@@ -158,6 +158,7 @@ interface Form {
   tipo:      string
   area:      string
   perim:     string
+  pe_direito: string
   afluencia_publico: boolean
   grupo_circuito_ilum: string
   grupo_circuito_tug: string
@@ -172,7 +173,7 @@ interface Form {
 }
 
 const EMPTY: Form = {
-  nome: '', tipo: 'Social', area: '', perim: '', afluencia_publico: false, grupo_circuito_ilum: '', grupo_circuito_tug: '',
+  nome: '', tipo: 'Social', area: '', perim: '', pe_direito: '2.8', afluencia_publico: false, grupo_circuito_ilum: '', grupo_circuito_tug: '',
   ilum_modo: 'auto', ilum_manual: '', ilum_string: '',
   tug_modo:  'auto', tug_manual: '',
 }
@@ -416,7 +417,7 @@ export function Comodos() {
       tipo:         form.tipo as Comodo['tipo'],
       area_m2:      area,
       perimetro_m:  perim,
-      pe_direito_m: 2.8,
+      pe_direito_m: parseFloat(form.pe_direito) || 2.8,
       afluencia_publico: form.afluencia_publico,
       grupo_circuito_ilum: form.grupo_circuito_ilum.trim() || undefined,
       grupo_circuito_tug: form.grupo_circuito_tug.trim() || undefined,
@@ -558,7 +559,7 @@ export function Comodos() {
             </select>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <div className="fgroup">
               <label className="flabel">Área (m²)</label>
               <input className="finput" type="number" value={form.area} onChange={updNumPositivo('area')}
@@ -572,6 +573,11 @@ export function Comodos() {
                 placeholder="20.0" min={1} step={0.5}
                 style={{ borderColor: erros.perim ? 'var(--red)' : '' }} />
               {erros.perim && <div style={{ fontSize: 10, color: 'var(--red)' }}>{erros.perim}</div>}
+            </div>
+            <div className="fgroup">
+              <label className="flabel" title="Usado no cálculo luminotécnico — única fonte, sem cópia em outra tela">Pé-direito (m)</label>
+              <input className="finput" type="number" value={form.pe_direito} onChange={updNumPositivo('pe_direito')}
+                placeholder="2.80" min={2} step={0.1} />
             </div>
           </div>
 

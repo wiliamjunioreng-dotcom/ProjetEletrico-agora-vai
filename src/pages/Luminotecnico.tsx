@@ -1,5 +1,13 @@
 // src/pages/Luminotecnico.tsx
 // Dimensionamento luminotécnico — Método dos Lúmens — NBR ISO/CIE 8995-1
+//
+// REESCRITO — antes mantinha cópia própria de nome/comprimento/largura/
+// pé-direito de cada ambiente, desconectada do Cômodo real (auditoria
+// de duplicação de dados). Agora cada ambiente calculado é uma
+// REFERÊNCIA (comodo_id) ao cômodo real — geometria sempre lida ao
+// vivo de lá, nunca copiada. Editar a área do cômodo em Cômodos.tsx
+// atualiza o cálculo luminotécnico automaticamente, sem precisar
+// reimportar nem haver risco de divergência entre as duas telas.
 
 import { useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
@@ -26,6 +34,19 @@ const ILUMINANCIAS: Record<string, { lux: number; desc: string }> = {
   'Outro':                { lux: 300,  desc: 'Personalizado' },
 }
 
+// Sugestão de categoria de iluminância a partir do tipo do cômodo real
+// (Comodo.tipo é uma categoria ampla — Social/Cozinha/Banho/Lavanderia/
+// Garagem/Externo — mais grossa que ILUMINANCIAS; serve só de ponto de
+// partida, o engenheiro pode refinar)
+function sugerirCategoriaAmbiente(tipoComodo: string): string {
+  if (tipoComodo === 'Banho') return 'Banheiro'
+  if (tipoComodo === 'Cozinha') return 'Cozinha — geral'
+  if (tipoComodo === 'Lavanderia') return 'Lavanderia'
+  if (tipoComodo === 'Garagem') return 'Garagem'
+  if (tipoComodo === 'Externo') return 'Corredor'
+  return 'Sala de estar'
+}
+
 // Luminárias típicas para seleção
 const LUMINARIAS = [
   { nome: 'LED Painel 40W/3600lm', pot: 40,  lm: 3600 },
@@ -38,77 +59,76 @@ const LUMINARIAS = [
   { nome: 'Personalizada',           pot: 0,  lm: 0    },
 ]
 
-interface AmbienteCalc {
-  id: string
-  nome: string
-  ambiente: string
-  comp: number
-  larg: number
-  pe: number
-  h_trabalho: number
-  lux: number
-  luminaria_idx: number
-  pot_custom: number
-  lm_custom: number
-  refl_teto: number
-  refl_parede: number
-  refl_piso: number
-  condicao_fm: 'muito_limpo' | 'normal' | 'normal_maior_acumulo' | 'sujo'
+// Deriva comprimento e largura a partir de área e perímetro REAIS do
+// cômodo, resolvendo o sistema comp×larg=área, comp+larg=perímetro/2
+// (raízes de x² - sx + área = 0, s = perímetro/2) — substitui a
+// aproximação antiga que assumia proporção fixa 1,4:1 sem checar o
+// perímetro real declarado.
+export function derivarDimensoes(area_m2: number, perimetro_m: number): { comp: number; larg: number } {
+  const s = perimetro_m / 2
+  const disc = s * s - 4 * area_m2
+  if (disc < 0 || s <= 0) {
+    const lado = Math.sqrt(Math.max(area_m2, 0.01))
+    return { comp: Math.round(lado * 100) / 100, larg: Math.round(lado * 100) / 100 }
+  }
+  const raiz = Math.sqrt(disc)
+  const comp = Math.round((s + raiz) / 2 * 100) / 100
+  const larg = Math.round((s - raiz) / 2 * 100) / 100
+  return { comp, larg }
 }
 
-const EMPTY: Omit<AmbienteCalc, 'id'> = {
-  nome: '', ambiente: 'Sala de estar',
-  comp: 0, larg: 0, pe: 2.8, h_trabalho: 0.75,
-  lux: 200, luminaria_idx: 0,
-  pot_custom: 0, lm_custom: 0,
+interface AmbienteCalc {
+  id:            string
+  comodo_id:     string   // referência ao Comodo real — nunca copia geometria
+  ambiente:      string   // categoria de iluminância (mais fina que Comodo.tipo)
+  h_trabalho:    number
+  lux:           number
+  luminaria_idx: number
+  pot_custom:    number
+  lm_custom:     number
+  refl_teto:     number
+  refl_parede:   number
+  refl_piso:     number
+  condicao_fm:   'muito_limpo' | 'normal' | 'normal_maior_acumulo' | 'sujo'
+}
+
+const EMPTY_CALC = {
+  h_trabalho: 0.75, lux: 200, luminaria_idx: 2,
+  pot_custom: 9, lm_custom: 900,
   refl_teto: 0.7, refl_parede: 0.5, refl_piso: 0.2,
-  condicao_fm: 'muito_limpo',
+  condicao_fm: 'muito_limpo' as const,
 }
 
 export function Luminotecnico() {
   const { comodos } = useProjectStore()
   const [ambientes, setAmbientes] = useState<AmbienteCalc[]>([])
-  const [form, setForm] = useState<Omit<AmbienteCalc, 'id'>>({ ...EMPTY })
-  const [erros, setErros] = useState<Record<string, string>>({})
+  const [comodoSelecionado, setComodoSelecionado] = useState('')
   const [activeId, setActiveId] = useState<string | null>(null)
 
-  function upd(k: keyof typeof EMPTY) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-      const v = e.target.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value
-      setForm(f => {
-        const next = { ...f, [k]: v }
-        // Auto-preencher lux do ambiente
-        if (k === 'ambiente' && ILUMINANCIAS[v as string]) {
-          next.lux = ILUMINANCIAS[v as string].lux
-        }
-        // Auto-preencher luminárias
-        if (k === 'luminaria_idx') {
-          const lum = LUMINARIAS[Number(v)]
-          if (lum && lum.pot > 0) {
-            next.pot_custom = lum.pot
-            next.lm_custom  = lum.lm
-          }
-        }
-        return next
-      })
-    }
-  }
+  const comodosDisponiveis = comodos.filter(c => c.area_m2 > 0 && !ambientes.some(a => a.comodo_id === c.id))
 
   function adicionar() {
-    const e: Record<string, string> = {}
-    if (!form.nome.trim()) e.nome = 'Obrigatório'
-    if (form.comp <= 0)    e.comp = 'Informe o comprimento'
-    if (form.larg <= 0)    e.larg = 'Informe a largura'
-    if (form.lux <= 0)     e.lux  = 'Informe a iluminância'
-    const lum = LUMINARIAS[form.luminaria_idx]
-    const pot = lum?.pot > 0 ? lum.pot : form.pot_custom
-    const lm  = lum?.lm  > 0 ? lum.lm  : form.lm_custom
-    if (pot <= 0 || lm <= 0) e.luminaria_idx = 'Selecione a luminária ou informe pot/lm'
-    if (Object.keys(e).length) { setErros(e); return }
-    setErros({})
+    const comodo = comodos.find(c => c.id === comodoSelecionado)
+    if (!comodo) return
+    const categoria = sugerirCategoriaAmbiente(comodo.tipo)
     const id = crypto.randomUUID()
-    setAmbientes(prev => [...prev, { ...form, id, pot_custom: pot, lm_custom: lm }])
+    setAmbientes(prev => [...prev, {
+      ...EMPTY_CALC, id, comodo_id: comodo.id,
+      ambiente: categoria, lux: ILUMINANCIAS[categoria]?.lux ?? 200,
+    }])
     setActiveId(id)
+    setComodoSelecionado('')
+  }
+
+  function adicionarTodos() {
+    const novos = comodosDisponiveis.map(c => {
+      const categoria = sugerirCategoriaAmbiente(c.tipo)
+      return {
+        ...EMPTY_CALC, id: crypto.randomUUID(), comodo_id: c.id,
+        ambiente: categoria, lux: ILUMINANCIAS[categoria]?.lux ?? 200,
+      }
+    })
+    setAmbientes(prev => [...prev, ...novos])
   }
 
   function remover(id: string) {
@@ -116,14 +136,22 @@ export function Luminotecnico() {
     if (activeId === id) setActiveId(null)
   }
 
-  // Calcular resultado para um ambiente
+  function atualizar(id: string, partial: Partial<AmbienteCalc>) {
+    setAmbientes(prev => prev.map(a => a.id === id ? { ...a, ...partial } : a))
+  }
+
+  // Calcula o resultado para um ambiente — geometria SEMPRE lida ao
+  // vivo do cômodo real, nunca de uma cópia armazenada
   function calcular(a: AmbienteCalc) {
+    const comodo = comodos.find(c => c.id === a.comodo_id)
+    if (!comodo) return null
+    const { comp, larg } = derivarDimensoes(comodo.area_m2, comodo.perimetro_m)
     const lum = LUMINARIAS[a.luminaria_idx]
     const pot = lum?.pot > 0 ? lum.pot : a.pot_custom
     const lm  = lum?.lm  > 0 ? lum.lm  : a.lm_custom
     const input: LuminoInput = {
-      area_m2:        a.comp * a.larg,
-      pe_direito_m:   a.pe,
+      area_m2:        comodo.area_m2,
+      pe_direito_m:   comodo.pe_direito_m || 2.8,
       h_plano_trabalho: a.h_trabalho,
       iluminancia_lux: a.lux,
       refl_teto:      a.refl_teto,
@@ -133,62 +161,29 @@ export function Luminotecnico() {
       luminaria_pot_w: pot,
       condicao_ambiente_fm: a.condicao_fm,
     }
-    return calcLuminotecnico(a.comp, a.larg, input)
+    return { comodo, comp, larg, resultado: calcLuminotecnico(comp, larg, input) }
   }
 
-  // Totais
-  const totais = ambientes.map(a => calcular(a))
-  const total_pot = totais.reduce((s, r) => s + r.pot_total_w, 0)
-  const total_lum = totais.reduce((s, r) => s + r.n_luminarias, 0)
-  const area_total = ambientes.reduce((s, a) => s + a.comp * a.larg, 0)
-  const dpf_medio = area_total > 0 ? total_pot / area_total : 0
-
-  // Preencher automaticamente dos cômodos do projeto
-  function importarComodos() {
-    const novos: AmbienteCalc[] = comodos
-      .filter(c => c.area_m2 > 0)
-      .map(c => {
-        // Estimar comp e larg de perímetro e área
-        const comp = Math.sqrt(c.area_m2 * 1.4)
-        const larg = c.area_m2 / comp
-        const amb  = c.tipo === 'Banho' ? 'Banheiro'
-                   : c.tipo === 'Cozinha' ? 'Cozinha — geral'
-                   : c.tipo === 'Lavanderia' ? 'Lavanderia'
-                   : c.tipo === 'Garagem' ? 'Garagem'
-                   : 'Sala de estar'
-        return {
-          ...EMPTY,
-          id:           crypto.randomUUID(),
-          nome:         c.nome,
-          ambiente:     amb,
-          comp:         Math.round(comp * 10) / 10,
-          larg:         Math.round(larg * 10) / 10,
-          pe:           c.pe_direito_m || 2.8,
-          h_trabalho:   0.75,
-          lux:          ILUMINANCIAS[amb]?.lux || 200,
-          luminaria_idx: 2, // LED Downlight 9W padrão
-          pot_custom:   9,
-          lm_custom:    900,
-          refl_teto:    0.7,
-          refl_parede:  0.5,
-          refl_piso:    0.2,
-        }
-      })
-    setAmbientes(prev => [...prev, ...novos])
-  }
+  const calculados = ambientes.map(a => ({ ambiente: a, calc: calcular(a) })).filter(x => x.calc !== null)
+  const totais = calculados.map(x => x.calc!.resultado)
+  const total_pot   = totais.reduce((s, r) => s + r.pot_total_w, 0)
+  const total_lum   = totais.reduce((s, r) => s + r.n_luminarias, 0)
+  const area_total  = calculados.reduce((s, x) => s + x.calc!.comodo.area_m2, 0)
+  const dpf_medio   = area_total > 0 ? total_pot / area_total : 0
+  const orfaos      = ambientes.length - calculados.length  // cômodos removidos depois de adicionados aqui
 
   return (<>
     <div className="page-header">
       <div>
         <div className="page-title">Luminotécnico</div>
         <div className="page-sub">
-          Método dos Lúmens · NBR ISO/CIE 8995-1 · NBR 5413 · {ambientes.length} ambientes
+          Método dos Lúmens · NBR ISO/CIE 8995-1 · geometria sempre lida do cômodo real
         </div>
       </div>
       <div className="page-actions">
-        {comodos.length > 0 && (
-          <button className="btn" onClick={importarComodos}>
-            Importar cômodos ({comodos.length})
+        {comodosDisponiveis.length > 0 && (
+          <button className="btn" onClick={adicionarTodos}>
+            + Todos os cômodos ({comodosDisponiveis.length})
           </button>
         )}
       </div>
@@ -220,151 +215,63 @@ export function Luminotecnico() {
     <div className="page-scroll">
     <div className="page-pad" style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 14, alignItems: 'start' }}>
 
-      {/* Formulário de entrada */}
+      {/* Adicionar ambiente — seleciona o CÔMODO REAL, não digita geometria de novo */}
       <div className="card" style={{ position: 'sticky', top: 0 }}>
-        <div className="card-header">Novo ambiente</div>
+        <div className="card-header">Adicionar ambiente</div>
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-          <div className="fgroup">
-            <label className="flabel">Nome do ambiente</label>
-            <input className="finput" value={form.nome}
-              onChange={upd('nome')} placeholder="Ex: Sala de Estar"
-              style={{ borderColor: erros.nome ? 'var(--red)' : '' }} />
-            {erros.nome && <div style={{ fontSize: 10, color: 'var(--red)' }}>{erros.nome}</div>}
-          </div>
-
-          <div className="fgroup">
-            <label className="flabel">Tipo de ambiente</label>
-            <select className="fselect" value={form.ambiente} onChange={upd('ambiente')}>
-              {Object.entries(ILUMINANCIAS).map(([k, v]) => (
-                <option key={k} value={k}>{k} — {v.desc}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Dimensões */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-            <div className="fgroup">
-              <label className="flabel">Comp. (m)</label>
-              <input className="finput" type="number" value={form.comp || ''} min={0} step={0.1}
-                onChange={upd('comp')} placeholder="m"
-                style={{ borderColor: erros.comp ? 'var(--red)' : '' }} />
+          {comodos.length === 0 ? (
+            <div className="toast-bar info">
+              Nenhum cômodo cadastrado ainda. Crie os cômodos na aba
+              <b> Cômodos e Cargas </b> primeiro — a geometria (área, perímetro,
+              pé-direito) vem de lá automaticamente, sem digitar de novo aqui.
             </div>
-            <div className="fgroup">
-              <label className="flabel">Larg. (m)</label>
-              <input className="finput" type="number" value={form.larg || ''} min={0} step={0.1}
-                onChange={upd('larg')} placeholder="m"
-                style={{ borderColor: erros.larg ? 'var(--red)' : '' }} />
-            </div>
-            <div className="fgroup">
-              <label className="flabel">Pé dir. (m)</label>
-              <input className="finput" type="number" value={form.pe} min={2} step={0.1}
-                onChange={upd('pe')} />
-            </div>
-          </div>
-
-          {/* Iluminância */}
-          <div className="fgroup">
-            <label className="flabel">
-              Iluminância (lux) — NBR ISO/CIE 8995-1
-            </label>
-            <input className="finput" type="number" value={form.lux} min={50} step={50}
-              onChange={upd('lux')} style={{ borderColor: erros.lux ? 'var(--red)' : '' }} />
-            <div className="fhint">
-              {ILUMINANCIAS[form.ambiente]?.desc || 'Valor personalizado'}
-            </div>
-          </div>
-
-          {/* Luminária */}
-          <div className="fgroup">
-            <label className="flabel">Luminária</label>
-            <select className="fselect" value={form.luminaria_idx} onChange={upd('luminaria_idx')}
-              style={{ borderColor: erros.luminaria_idx ? 'var(--red)' : '' }}>
-              {LUMINARIAS.map((l, i) => (
-                <option key={i} value={i}>{l.nome}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Campos personalizados se "Personalizada" */}
-          {form.luminaria_idx === LUMINARIAS.length - 1 && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          ) : comodosDisponiveis.length === 0 ? (
+            <div className="toast-bar ok">✓ Todos os cômodos já têm cálculo luminotécnico.</div>
+          ) : (
+            <>
               <div className="fgroup">
-                <label className="flabel">Potência (W)</label>
-                <input className="finput" type="number" value={form.pot_custom || ''} min={0}
-                  onChange={upd('pot_custom')} />
-              </div>
-              <div className="fgroup">
-                <label className="flabel">Fluxo (lm)</label>
-                <input className="finput" type="number" value={form.lm_custom || ''} min={0}
-                  onChange={upd('lm_custom')} />
-              </div>
-            </div>
-          )}
-
-          {/* Refletâncias */}
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-            <div className="flabel" style={{ marginBottom: 6 }}>
-              Refletâncias das superfícies
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-              {[
-                { k: 'refl_teto' as const,   label: 'Teto',   hint: 'Branco=0.8' },
-                { k: 'refl_parede' as const, label: 'Paredes',hint: 'Médio=0.5' },
-                { k: 'refl_piso' as const,   label: 'Piso',   hint: 'Escuro=0.2' },
-              ].map(({ k, label, hint }) => (
-                <div key={k} className="fgroup">
-                  <label className="flabel">{label}</label>
-                  <input className="finput" type="number" value={form[k]} min={0} max={1} step={0.05}
-                    onChange={upd(k)} />
-                  <div className="fhint">{hint}</div>
+                <label className="flabel">Cômodo</label>
+                <select className="fselect" value={comodoSelecionado}
+                  onChange={e => setComodoSelecionado(e.target.value)}>
+                  <option value="">— selecione —</option>
+                  {comodosDisponiveis.map(c => (
+                    <option key={c.id} value={c.id}>{c.nome} ({c.area_m2}m²)</option>
+                  ))}
+                </select>
+                <div className="fhint">
+                  Área, perímetro e pé-direito vêm direto do cadastro do cômodo —
+                  editar lá atualiza aqui automaticamente.
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Fator de manutenção — Anexo D NBR ISO/CIE 8995-1 */}
-          <div className="fgroup" style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-            <label className="flabel" title="Anexo D — FM real por condição de ambiente e ciclo de limpeza. O padrão 'muito limpo' (0,80) é o cenário mais otimista, não uma média típica.">
-              Condição do ambiente (Fator de Manutenção)
-            </label>
-            <select className="fselect" value={form.condicao_fm} onChange={upd('condicao_fm')}>
-              <option value="muito_limpo">Muito limpo — limpeza anual (FM=0,80)</option>
-              <option value="normal">Normal — limpeza a cada 3 anos (FM=0,67)</option>
-              <option value="normal_maior_acumulo">Normal, maior acúmulo de pó (FM=0,57)</option>
-              <option value="sujo">Ambiente sujo — indústria/garagem (FM=0,50)</option>
-            </select>
-            <div className="fhint">
-              Escritório padrão real costuma ser "Normal" (0,67), não o default otimista.
-            </div>
-          </div>
-
-          <button className="btn primary" onClick={adicionar}
-            style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
-            + Calcular ambiente
-          </button>
+              </div>
+              <button className="btn primary" onClick={adicionar} disabled={!comodoSelecionado}
+                style={{ width: '100%', justifyContent: 'center' }}>
+                + Calcular este ambiente
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Resultados */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-        {ambientes.length === 0 ? (
+        {orfaos > 0 && (
+          <div className="toast-bar warn">
+            ⚠ {orfaos} ambiente(s) referenciam cômodo(s) removido(s) de Cômodos e Cargas — não aparecem mais no cálculo.
+          </div>
+        )}
+
+        {calculados.length === 0 ? (
           <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--text4)' }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>💡</div>
             <div style={{ fontSize: 13, marginBottom: 4 }}>Nenhum ambiente calculado</div>
-            <div style={{ fontSize: 11 }}>
-              {comodos.length > 0
-                ? 'Clique em "Importar cômodos" ou preencha o formulário'
-                : 'Preencha o formulário ao lado'}
-            </div>
+            <div style={{ fontSize: 11 }}>Selecione um cômodo ao lado para começar</div>
           </div>
-        ) : ambientes.map(a => {
-          const r    = calcular(a)
+        ) : calculados.map(({ ambiente: a, calc }) => {
+          const { comodo, comp, larg, resultado: r } = calc!
           const isActive = activeId === a.id
           const lum  = LUMINARIAS[a.luminaria_idx]
           const nomeLum = lum?.nome || 'Personalizada'
-          const area = a.comp * a.larg
           const dpfOk = r.dpf <= 12
 
           return (
@@ -372,9 +279,9 @@ export function Luminotecnico() {
               onClick={() => setActiveId(isActive ? null : a.id)}
               style={{ cursor: 'pointer', borderColor: isActive ? 'var(--blue)' : '', outline: isActive ? '2px solid var(--blue-line)' : 'none' }}>
               <div className="card-header">
-                <span style={{ fontWeight: 600 }}>{a.nome}</span>
+                <span style={{ fontWeight: 600 }}>{comodo.nome}</span>
                 <span style={{ fontSize: 10, color: 'var(--text4)', marginLeft: 8 }}>
-                  {a.comp}m × {a.larg}m = {area.toFixed(1)}m² · {a.lux} lux
+                  {comodo.area_m2}m² (do cadastro) · {a.lux} lux
                 </span>
                 <button onClick={e => { e.stopPropagation(); remover(a.id) }}
                   style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text4)', cursor: 'pointer', fontSize: 18 }}>
@@ -385,40 +292,106 @@ export function Luminotecnico() {
               {/* Resultado resumido */}
               <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
                 {[
-                  ['Luminárias', r.n_luminarias, 'un.', '#0f62fe'],
-                  ['Potência', r.pot_total_w, 'W',  '#6929c4'],
-                  ['Em real', r.em_real, 'lux', '#0f9d58'],
-                  ['DPF', r.dpf, 'W/m²', dpfOk ? '#0f9d58' : '#f59e0b'],
-                ].map(([l, v, u, c]) => (
+                  ['Luminárias', r.n_luminarias, 'un.', 'var(--blue)'],
+                  ['Potência', r.pot_total_w, 'W',  'var(--purple)'],
+                  ['Em real', r.em_real, 'lux', 'var(--green)'],
+                  ['DPF', r.dpf, 'W/m²', dpfOk ? 'var(--green)' : 'var(--amber)'],
+                ].map(([l, v, u, cor]) => (
                   <div key={l as string} style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 9, color: 'var(--text4)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 3 }}>{l}</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: c as string, fontFamily: 'var(--mono)' }}>{v}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: cor as string, fontFamily: 'var(--mono)' }}>{v}</div>
                     <div style={{ fontSize: 9, color: 'var(--text4)' }}>{u}</div>
                   </div>
                 ))}
               </div>
 
-              {/* Detalhe expandido */}
+              {/* Detalhe expandido — inclui os parâmetros específicos do
+                  cálculo luminotécnico (não geometria, essa vem do cômodo) */}
               {isActive && (
-                <div style={{ borderTop: '1px solid var(--border)', padding: 14 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div style={{ borderTop: '1px solid var(--border)', padding: 14 }} onClick={e => e.stopPropagation()}>
 
+                  <div className="form-grid c4" style={{ marginBottom: 14 }}>
+                    <div className="fgroup">
+                      <label className="flabel">Categoria (lux alvo)</label>
+                      <select className="fselect" value={a.ambiente}
+                        onChange={e => atualizar(a.id, { ambiente: e.target.value, lux: ILUMINANCIAS[e.target.value]?.lux ?? a.lux })}>
+                        {Object.entries(ILUMINANCIAS).map(([k, v]) => (
+                          <option key={k} value={k}>{k} — {v.desc}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="fgroup">
+                      <label className="flabel">Iluminância (lux)</label>
+                      <input className="finput" type="number" value={a.lux} min={50} step={50}
+                        onChange={e => atualizar(a.id, { lux: Number(e.target.value) })} />
+                    </div>
+                    <div className="fgroup" style={{ gridColumn: 'span 2' }}>
+                      <label className="flabel">Luminária</label>
+                      <select className="fselect" value={a.luminaria_idx}
+                        onChange={e => {
+                          const idx = Number(e.target.value)
+                          const l = LUMINARIAS[idx]
+                          atualizar(a.id, { luminaria_idx: idx, ...(l?.pot > 0 ? { pot_custom: l.pot, lm_custom: l.lm } : {}) })
+                        }}>
+                        {LUMINARIAS.map((l, i) => <option key={i} value={i}>{l.nome}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {a.luminaria_idx === LUMINARIAS.length - 1 && (
+                    <div className="form-grid c2" style={{ marginBottom: 14 }}>
+                      <div className="fgroup">
+                        <label className="flabel">Potência (W)</label>
+                        <input className="finput" type="number" value={a.pot_custom || ''} min={0}
+                          onChange={e => atualizar(a.id, { pot_custom: Number(e.target.value) })} />
+                      </div>
+                      <div className="fgroup">
+                        <label className="flabel">Fluxo (lm)</label>
+                        <input className="finput" type="number" value={a.lm_custom || ''} min={0}
+                          onChange={e => atualizar(a.id, { lm_custom: Number(e.target.value) })} />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="form-grid c4" style={{ marginBottom: 14 }}>
+                    {[
+                      { k: 'refl_teto' as const,   label: 'Refl. Teto',   hint: 'Branco=0.8' },
+                      { k: 'refl_parede' as const, label: 'Refl. Parede', hint: 'Médio=0.5' },
+                      { k: 'refl_piso' as const,   label: 'Refl. Piso',   hint: 'Escuro=0.2' },
+                    ].map(({ k, label, hint }) => (
+                      <div key={k} className="fgroup">
+                        <label className="flabel">{label}</label>
+                        <input className="finput" type="number" value={a[k]} min={0} max={1} step={0.05}
+                          onChange={e => atualizar(a.id, { [k]: Number(e.target.value) } as any)} />
+                        <div className="fhint">{hint}</div>
+                      </div>
+                    ))}
+                    <div className="fgroup">
+                      <label className="flabel" title="Anexo D NBR ISO/CIE 8995-1">Manutenção</label>
+                      <select className="fselect" value={a.condicao_fm}
+                        onChange={e => atualizar(a.id, { condicao_fm: e.target.value as any })}>
+                        <option value="muito_limpo">Limpo (0,80)</option>
+                        <option value="normal">Normal (0,67)</option>
+                        <option value="normal_maior_acumulo">Poeirento (0,57)</option>
+                        <option value="sujo">Sujo (0,50)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                     {/* Memória de cálculo */}
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.05em' }}>
                         Memória de cálculo
                       </div>
                       {[
-                        ['Ambiente', `${a.comp}m × ${a.larg}m × ${a.pe}m`],
-                        ['Área', `${area.toFixed(2)} m²`],
+                        ['Ambiente (derivado)', `${comp}m × ${larg}m × ${comodo.pe_direito_m}m`],
+                        ['Área (do cômodo)', `${comodo.area_m2.toFixed(2)} m²`],
                         ['Índice do local (k)', r.k.toFixed(2)],
                         ['Fator de utilização (CU)', r.cu.toFixed(3)],
                         ['Fator de manutenção (FM)', r.fm.toFixed(2)],
-                        ['Iluminância requerida', `${a.lux} lux`],
-                        ['Fluxo total necessário', `${Math.round(a.lux * area / (r.cu * r.fm))} lm`],
+                        ['Fluxo total necessário', `${Math.round(a.lux * comodo.area_m2 / (r.cu * r.fm))} lm`],
                         ['Luminária', nomeLum],
-                        ['Fluxo/luminária', `${a.lm_custom || lum?.lm} lm`],
-                        ['N° luminárias (exato)', r.n_raw.toFixed(2)],
                         ['N° luminárias (adotado)', r.n_luminarias],
                         ['Em real atingida', `${r.em_real} lux`],
                         ['Densidade de potência', `${r.dpf} W/m²`],
@@ -452,21 +425,9 @@ export function Luminotecnico() {
                           )}
                         </div>
                       ))}
-
-                      {/* Mini planta SVG */}
                       <div style={{ marginTop: 10 }}>
-                        <div style={{ fontSize: 10, color: 'var(--text4)', marginBottom: 4 }}>Planta esquemática</div>
-                        <PlantaLuminarias
-                          comp={a.comp} larg={a.larg}
-                          arranjo={r.arranjos[0]}
-                          n={r.n_luminarias}
-                        />
-                      </div>
-
-                      {/* Norma */}
-                      <div style={{ marginTop: 10, padding: '8px 10px', background: 'var(--surface2)', borderRadius: 6, fontSize: 10, color: 'var(--text3)' }}>
-                        <strong>Norma:</strong> NBR ISO/CIE 8995-1:2013<br />
-                        Em ≥ {a.lux} lux · DPF ≤ 12 W/m² (LED eficiente)
+                        <div style={{ fontSize: 10, color: 'var(--text4)', marginBottom: 4 }}>Planta esquemática (derivada)</div>
+                        <PlantaLuminarias comp={comp} larg={larg} arranjo={r.arranjos[0]} n={r.n_luminarias} />
                       </div>
                     </div>
                   </div>
@@ -477,7 +438,7 @@ export function Luminotecnico() {
         })}
 
         {/* Tabela resumo geral */}
-        {ambientes.length > 1 && (
+        {calculados.length > 1 && (
           <div className="card">
             <div className="card-header">Resumo geral — todos os ambientes</div>
             <table className="dtable">
@@ -485,24 +446,19 @@ export function Luminotecnico() {
                 <th>Ambiente</th>
                 <th className="r">Área (m²)</th>
                 <th className="r">lux req.</th>
-                <th className="r">k</th>
-                <th className="r">CU</th>
                 <th className="r">N° lum.</th>
                 <th className="r">Pot. (W)</th>
                 <th className="r">Em (lux)</th>
                 <th className="r">DPF W/m²</th>
               </tr></thead>
               <tbody>
-                {ambientes.map((a) => {
-                  const r = calcular(a)
-                  const area = a.comp * a.larg
+                {calculados.map(({ ambiente: a, calc }) => {
+                  const { comodo, resultado: r } = calc!
                   return (
                     <tr key={a.id}>
-                      <td className="name">{a.nome}</td>
-                      <td className="mono r">{area.toFixed(1)}</td>
+                      <td className="name">{comodo.nome}</td>
+                      <td className="mono r">{comodo.area_m2.toFixed(1)}</td>
                       <td className="mono r">{a.lux}</td>
-                      <td className="mono r">{r.k}</td>
-                      <td className="mono r">{r.cu}</td>
                       <td className="mono r" style={{ color: 'var(--blue)', fontWeight: 600 }}>{r.n_luminarias}</td>
                       <td className="mono r">{r.pot_total_w}</td>
                       <td className="mono r" style={{ color: r.em_real >= a.lux ? 'var(--green)' : 'var(--red)' }}>{r.em_real}</td>
@@ -513,7 +469,7 @@ export function Luminotecnico() {
                 <tr style={{ background: 'var(--surface2)', fontWeight: 600 }}>
                   <td className="name">TOTAL</td>
                   <td className="mono r">{area_total.toFixed(1)}</td>
-                  <td colSpan={3} />
+                  <td colSpan={1} />
                   <td className="mono r" style={{ color: 'var(--blue)' }}>{total_lum}</td>
                   <td className="mono r">{total_pot}</td>
                   <td colSpan={1} />
@@ -541,7 +497,6 @@ function PlantaLuminarias({ comp, larg, arranjo, n }: {
   const pw = comp * escala, ph = larg * escala
   const ox = (W - pw) / 2, oy = (H - ph) / 2
 
-  // Parsear arranjo "C col × R lin"
   const match = arranjo.desc.match(/(\d+)\s*col\s*×\s*(\d+)\s*lin/)
   const cols  = match ? parseInt(match[1]) : 1
   const rows  = match ? parseInt(match[2]) : n
@@ -558,10 +513,8 @@ function PlantaLuminarias({ comp, larg, arranjo, n }: {
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}
       style={{ background: 'var(--surface2)', borderRadius: 6, border: '1px solid var(--border)' }}>
-      {/* Planta */}
       <rect x={ox} y={oy} width={pw} height={ph}
         fill="none" stroke="var(--text3)" strokeWidth={1} strokeDasharray="3 2" />
-      {/* Dimensões */}
       <text x={W / 2} y={oy - 4} textAnchor="middle" fontSize={8} fill="var(--text4)" fontFamily="var(--mono)">
         {comp}m
       </text>
@@ -569,7 +522,6 @@ function PlantaLuminarias({ comp, larg, arranjo, n }: {
         fontFamily="var(--mono)" transform={`rotate(-90,${ox - 4},${H / 2})`}>
         {larg}m
       </text>
-      {/* Luminárias */}
       {pontos.map(([x, y], idx) => (
         <g key={idx}>
           <circle cx={x} cy={y} r={4} fill="var(--amber)" fillOpacity={.8} />
