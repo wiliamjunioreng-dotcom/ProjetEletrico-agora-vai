@@ -22,86 +22,22 @@ const TIPO_DESC: Record<string, string> = {
   Externo:    'Varanda, sacada, área externa — IDR 30mA',
 }
 
-// ── Catálogo de luminárias (amplo, não só LED) ────────────────────
 
-interface PresetLamp {
-  grupo: string
-  desc:  string
-  pot:   number   // W
-  lm:    number
-  obs?:  string
-}
-
-const CATALOGO_LAMPADAS: PresetLamp[] = [
-  // LED — tecnologia atual
-  { grupo:'LED', desc:'LED Bulbo A60 9W',       pot:9,   lm:810,  obs:'Substitui incandescente 60W' },
-  { grupo:'LED', desc:'LED Bulbo A60 12W',      pot:12,  lm:1100, obs:'Substitui incandescente 75W' },
-  { grupo:'LED', desc:'LED Bulbo A60 15W',      pot:15,  lm:1500, obs:'Substitui incandescente 100W' },
-  { grupo:'LED', desc:'LED Downlight 7W',       pot:7,   lm:600  },
-  { grupo:'LED', desc:'LED Downlight 9W',       pot:9,   lm:900  },
-  { grupo:'LED', desc:'LED Downlight 12W',      pot:12,  lm:1200 },
-  { grupo:'LED', desc:'LED Downlight 18W',      pot:18,  lm:1800 },
-  { grupo:'LED', desc:'LED Spot GU10 5W',       pot:5,   lm:400  },
-  { grupo:'LED', desc:'LED Spot GU10 7W',       pot:7,   lm:600  },
-  { grupo:'LED', desc:'LED Tube T8 9W (60cm)',  pot:9,   lm:900  },
-  { grupo:'LED', desc:'LED Tube T8 18W (120cm)',pot:18,  lm:1800 },
-  { grupo:'LED', desc:'LED Painel 24W',         pot:24,  lm:2400 },
-  { grupo:'LED', desc:'LED Painel 36W',         pot:36,  lm:3600 },
-  { grupo:'LED', desc:'LED Fita 5W/m',          pot:5,   lm:450, obs:'Por metro linear' },
-  { grupo:'LED', desc:'LED Fita 10W/m',         pot:10,  lm:900, obs:'Por metro linear' },
-  { grupo:'LED', desc:'LED Dicroica GU5.3 5W',  pot:5,   lm:400  },
-  { grupo:'LED', desc:'LED High Bay 100W',      pot:100, lm:12000, obs:'Industrial/galpão' },
-  { grupo:'LED', desc:'LED High Bay 150W',      pot:150, lm:18000, obs:'Industrial/galpão' },
-  // Fluorescente compacta
-  { grupo:'Fluorescente', desc:'CFL 9W',        pot:9,   lm:560,  obs:'Obsoleta — uso residual' },
-  { grupo:'Fluorescente', desc:'CFL 15W',       pot:15,  lm:900  },
-  { grupo:'Fluorescente', desc:'CFL 23W',       pot:23,  lm:1500 },
-  { grupo:'Fluorescente', desc:'Tube T8 32W',   pot:32,  lm:2600 },
-  { grupo:'Fluorescente', desc:'Tube T8 40W',   pot:40,  lm:3200 },
-  // Halógena
-  { grupo:'Halógena', desc:'Halógena 20W',      pot:20,  lm:300,  obs:'Alta temperatura — evitar' },
-  { grupo:'Halógena', desc:'Halógena 50W',      pot:50,  lm:850  },
-  { grupo:'Halógena', desc:'Halógena 100W',     pot:100, lm:1650 },
-  { grupo:'Halógena', desc:'Dicroica GU5.3 35W',pot:35,  lm:550 },
-  { grupo:'Halógena', desc:'Dicroica GU5.3 50W',pot:50,  lm:850 },
-  // Vapor de sódio
-  { grupo:'Vapor Sódio', desc:'Vapor Sódio 70W', pot:70, lm:6600, obs:'Área externa/industrial' },
-  { grupo:'Vapor Sódio', desc:'Vapor Sódio 150W',pot:150,lm:16000 },
-  { grupo:'Vapor Sódio', desc:'Vapor Sódio 250W',pot:250,lm:28500 },
-  { grupo:'Vapor Sódio', desc:'Vapor Sódio 400W',pot:400,lm:47000 },
-  // Vapor de mercúrio
-  { grupo:'Vapor Mercúrio', desc:'Vapor Mercúrio 80W',  pot:80,  lm:3800, obs:'Em desuso' },
-  { grupo:'Vapor Mercúrio', desc:'Vapor Mercúrio 125W', pot:125, lm:6400 },
-  { grupo:'Vapor Mercúrio', desc:'Vapor Mercúrio 250W', pot:250, lm:13500 },
-  { grupo:'Vapor Mercúrio', desc:'Vapor Mercúrio 400W', pot:400, lm:22500 },
-  // Metal halide
-  { grupo:'Metal Halide', desc:'Metal Halide 35W',  pot:35,  lm:3200 },
-  { grupo:'Metal Halide', desc:'Metal Halide 70W',  pot:70,  lm:7000 },
-  { grupo:'Metal Halide', desc:'Metal Halide 150W', pot:150, lm:14000 },
-  { grupo:'Metal Halide', desc:'Metal Halide 250W', pot:250, lm:24000 },
-  { grupo:'Metal Halide', desc:'Metal Halide 400W', pot:400, lm:40000 },
-  // Incandescente (referência histórica)
-  { grupo:'Incandescente', desc:'Incandescente 40W',  pot:40,  lm:440,  obs:'Proibida — referência' },
-  { grupo:'Incandescente', desc:'Incandescente 60W',  pot:60,  lm:720  },
-  { grupo:'Incandescente', desc:'Incandescente 100W', pot:100, lm:1380 },
-  // Personalizada
-  { grupo:'Personalizada', desc:'Personalizada', pot:0, lm:0, obs:'Informe potência e fluxo' },
-]
-
-const GRUPOS = [...new Set(CATALOGO_LAMPADAS.map(l => l.grupo))]
 
 // ── Fatores de dimensionamento por tecnologia ─────────────────────
 // NBR 5410 §9.5.2.1: mínimo 100VA/ponto
 // Fator sobre a pot. real para compensar harmônicas, chaveamento, margem de segurança
+// Fator de segurança pra potência de dimensionamento — NÃO é catálogo
+// de produto, é margem normativa por TECNOLOGIA (harmônicas de driver
+// LED vs carga puramente resistiva de incandescente). O engenheiro
+// digita os dados reais da lâmpada (potência, lúmens); isso aqui só
+// ajusta a margem de segurança do cabo/disjuntor conforme a tecnologia.
 const FATOR_DIM: Record<string, number> = {
-  'LED':           1.8,   // harmônicas do driver + margem para troca futura
-  'Fluorescente':  1.5,   // reator/driver + fator de potência
-  'Halógena':      1.1,   // carga resistiva, pouco fator
-  'Vapor Sódio':   1.25,  // reator + ignitor
-  'Vapor Mercúrio':1.25,
-  'Metal Halide':  1.25,
-  'Incandescente': 1.0,   // carga puramente resistiva
-  'Personalizada': 1.5,   // conservador
+  'LED':            1.8,   // harmônicas do driver + margem para troca futura
+  'Fluorescente':   1.5,   // reator/driver + fator de potência
+  'Halogena':       1.1,   // carga resistiva, pouco fator
+  'Descarga':       1.25,  // vapor sódio/mercúrio/metal halide — reator+ignitor
+  'Incandescente':  1.0,   // carga puramente resistiva
 }
 
 const MIN_VA_PONTO = 100  // NBR 5410 §9.5.2.1
@@ -299,10 +235,11 @@ export function Comodos() {
   const [lumLmC,   setLumLmC]   = useState('')
 
   // Formulário de lampada
-  const [lampGrupo,  setLampGrupo]  = useState(GRUPOS[0])
-  const [lampPreset, setLampPreset] = useState(0)
+  const [lampDesc,   setLampDesc]   = useState('')
+  const [lampTecnologia, setLampTecnologia] = useState<'LED'|'Fluorescente'|'Halogena'|'Descarga'|'Incandescente'>('LED')
   const [lampQtd,    setLampQtd]    = useState('')
   const [lampPot,    setLampPot]    = useState('')
+  const [lampLm,     setLampLm]     = useState('')
   const [lampTipo,   setLampTipo]   = useState<'geral'|'efeito'>('geral')
   // Formulário de tomada
   const [tomPreset,  setTomPreset]  = useState(0)
@@ -319,7 +256,7 @@ export function Comodos() {
   // Calcular potências de iluminação
   const potRealLamps_w = lampadas.reduce((s, l) => s + l.qtd * l.pot_w, 0)
   const nPontos        = lampadas.reduce((s, l) => s + l.qtd, 0)
-  const grupoPredom    = lampadas[0] ? CATALOGO_LAMPADAS.find(l => l.desc === lampadas[0].descricao)?.grupo || 'LED' : 'LED'
+  const grupoPredom    = lampadas[0]?.tecnologia || 'LED'
   const potDimLamps    = potRealLamps_w > 0 ? calcPotDim(potRealLamps_w, nPontos, grupoPredom) : 0
 
   // Parsed string
@@ -385,26 +322,21 @@ export function Comodos() {
       setForm(f => ({ ...f, [k]: valor }))
     }
 
-  const presetsDoGrupo = CATALOGO_LAMPADAS.filter(l => l.grupo === lampGrupo)
-
   function addLampada() {
-    const preset = presetsDoGrupo[lampPreset] ?? presetsDoGrupo[0]
     const qtd = parseInt(lampQtd) || 0
-    const pot = parseFloat(lampPot) || preset.pot
+    const pot = parseFloat(lampPot) || 0
     if (qtd <= 0 || pot <= 0) return
-    // Lúmens reais do catálogo — se a potência foi customizada
-    // (diferente do preset), escala o fluxo proporcionalmente em vez
-    // de manter o lm do preset original (evita declarar lúmens de uma
-    // lâmpada de outra potência).
-    const lmEscalado = preset.pot > 0 ? Math.round(preset.lm * (pot / preset.pot)) : preset.lm
+    const lm = parseFloat(lampLm) || undefined
     setLampadas(prev => [...prev, {
       id: crypto.randomUUID(),
-      descricao: preset.desc,
+      descricao: lampDesc.trim() || `Lâmpada ${pot}W`,
       qtd, pot_w: pot,
-      pot_dim_w: pot * (FATOR_DIM[lampGrupo] ?? 1.5),
-      lm: lmEscalado,
+      pot_dim_w: pot * (FATOR_DIM[lampTecnologia] ?? 1.5),
+      lm,
       tipo: lampTipo,
+      tecnologia: lampTecnologia,
     }])
+    setLampDesc(''); setLampLm('')
     setLampQtd('')
   }
 
@@ -671,31 +603,17 @@ export function Comodos() {
             {/* Modo LAMPADAS */}
             {form.ilum_modo === 'lampadas' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {/* Linha de adição */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  <div className="fgroup">
-                    <label className="flabel" style={{ fontSize: 9 }}>Grupo</label>
-                    <select className="fselect" style={{ height: 28, fontSize: 11 }}
-                      value={lampGrupo}
-                      onChange={e => { setLampGrupo(e.target.value); setLampPreset(0) }}>
-                      {GRUPOS.map(g => <option key={g}>{g}</option>)}
-                    </select>
-                  </div>
-                  <div className="fgroup">
-                    <label className="flabel" style={{ fontSize: 9 }}>Modelo</label>
-                    <select className="fselect" style={{ height: 28, fontSize: 11 }}
-                      value={lampPreset}
-                      onChange={e => {
-                        const idx = Number(e.target.value)
-                        setLampPreset(idx)
-                        const p = presetsDoGrupo[idx]
-                        if (p && p.pot > 0) setLampPot(String(p.pot))
-                      }}>
-                      {presetsDoGrupo.map((p, i) => <option key={i} value={i}>{p.desc}{p.obs ? ` (${p.obs})` : ''}</option>)}
-                    </select>
-                  </div>
+                {/* Preenchimento direto — sem catálogo de produto. O
+                    engenheiro digita os dados reais do datasheet do
+                    fabricante; "Tecnologia" só ajusta a margem de
+                    segurança de dimensionamento (não é escolha de modelo). */}
+                <div className="fgroup">
+                  <label className="flabel" style={{ fontSize: 9 }}>Descrição</label>
+                  <input className="finput" style={{ height: 28, padding: '0 8px', fontSize: 11 }}
+                    value={lampDesc} onChange={e => setLampDesc(e.target.value)}
+                    placeholder="ex: LED 9W A60 — fabricante X" />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '50px 70px 84px 1fr auto', gap: 6, alignItems: 'end' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '46px 64px 64px 100px 84px auto', gap: 6, alignItems: 'end' }}>
                   <div className="fgroup" style={{ margin: 0 }}>
                     <label className="flabel" style={{ fontSize: 9 }}>Qtd</label>
                     <input className="finput" type="number" style={{ height: 28, padding: '0 6px', fontSize: 11 }}
@@ -707,6 +625,22 @@ export function Comodos() {
                       value={lampPot} onChange={e => setLampPot(e.target.value)} placeholder="9" min={0.5} />
                   </div>
                   <div className="fgroup" style={{ margin: 0 }}>
+                    <label className="flabel" style={{ fontSize: 9 }} title="Do datasheet do fabricante — usado no Método dos Lúmens (aba Luminotécnico) pra saber o quão iluminado o ambiente vai ficar">Lúmens</label>
+                    <input className="finput" type="number" style={{ height: 28, padding: '0 6px', fontSize: 11 }}
+                      value={lampLm} onChange={e => setLampLm(e.target.value)} placeholder="810" min={0} />
+                  </div>
+                  <div className="fgroup" style={{ margin: 0 }}>
+                    <label className="flabel" style={{ fontSize: 9 }} title="Só define a margem de segurança de dimensionamento do cabo — não é catálogo de produto">Tecnologia</label>
+                    <select className="fselect" style={{ height: 28, padding: '0 6px', fontSize: 11 }}
+                      value={lampTecnologia} onChange={e => setLampTecnologia(e.target.value as any)}>
+                      <option value="LED">LED</option>
+                      <option value="Fluorescente">Fluorescente</option>
+                      <option value="Halogena">Halógena</option>
+                      <option value="Descarga">Descarga (sódio/mercúrio)</option>
+                      <option value="Incandescente">Incandescente</option>
+                    </select>
+                  </div>
+                  <div className="fgroup" style={{ margin: 0 }}>
                     <label className="flabel" style={{ fontSize: 9 }}>Tipo</label>
                     <select className="fselect" style={{ height: 28, padding: '0 6px', fontSize: 11 }}
                       value={lampTipo} onChange={e => setLampTipo(e.target.value as any)}
@@ -715,10 +649,10 @@ export function Comodos() {
                       <option value="efeito">Efeito</option>
                     </select>
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--text4)', alignSelf: 'center', paddingTop: 4 }}>
-                    {presetsDoGrupo[lampPreset]?.obs || `${presetsDoGrupo[lampPreset]?.lm ?? '?'}lm · Fator dim.: ×${FATOR_DIM[lampGrupo] ?? 1.5}`}
-                  </div>
                   <button className="btn primary" style={{ height: 28, padding: '0 12px', alignSelf: 'flex-end' }} onClick={addLampada}>+</button>
+                </div>
+                <div style={{ fontSize: 9.5, color: 'var(--text4)' }}>
+                  Fator de dimensionamento aplicado: ×{FATOR_DIM[lampTecnologia] ?? 1.5}
                 </div>
 
                 {/* Lista */}

@@ -10,14 +10,18 @@ import type { CircuitResult } from '../core/engine'
 
 export interface LampadaReal {
   id:       string
-  descricao: string   // Ex: "LED 9W A60"
+  descricao: string   // livre — o engenheiro digita (ex: "LED 9W A60 Philips")
   qtd:      number
   pot_w:    number    // potência real de cada unidade
   pot_dim_w?: number  // potência para dimensionamento (se diferente)
-  lm?:      number    // fluxo luminoso real de cada unidade (lúmens)
+  lm?:      number    // fluxo luminoso real de cada unidade (lúmens) — digitado pelo engenheiro, do datasheet do fabricante
   // Iluminação geral (uso principal do ambiente) vs de efeito
   // (arandela, sanca, fita decorativa — realce, não a luz principal)
   tipo?:    'geral' | 'efeito'
+  // Tecnologia — só para o fator de segurança de dimensionamento
+  // (harmônicas de driver LED vs carga resistiva de incandescente),
+  // NÃO é catálogo de produto — o engenheiro digita tudo o resto.
+  tecnologia?: 'LED' | 'Fluorescente' | 'Halogena' | 'Descarga' | 'Incandescente'
 }
 
 // ── Histórico de decisões do projeto ─────────────────────────────
