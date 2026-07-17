@@ -491,44 +491,64 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const tugEntries  = co.cargas_manuais.filter(cm => cm.tipo === 'TUG')
       const outrasEntries = co.cargas_manuais.filter(cm => cm.tipo !== 'ILUM' && cm.tipo !== 'TUG')
 
-      // Helper: agrupa uma lista de cargas do MESMO tipo num único
-      // circuito por natureza (respeitando o limite de 800VA — mesmo
-      // teto usado no agrupamento automático de ILUM). A ligação/fase
-      // final é a do PRIMEIRO item com maior exigência (tri > bi > mono)
-      // — se qualquer carga do grupo precisar de mais fases, o circuito
-      // inteiro precisa delas.
+      // Helper: agrupa cargas do MESMO tipo E MESMA ligação num único
+      // circuito (respeitando o limite de 800VA — mesmo teto usado no
+      // agrupamento automático de ILUM).
+      //
+      // BUG CORRIGIDO: a versão anterior juntava TODAS as cargas do
+      // tipo (ex: todo ILUM do cômodo) num grupo só, e quando alguma
+      // pedia mais fase, ESCALAVA o circuito inteiro pra essa exigência
+      // — um "Spot comum" monofásico podia acabar destinado a um
+      // circuito bifásico só porque um "Refletor 220V" bifásico estava
+      // no mesmo grupo. Fisicamente incoerente: um circuito bifásico
+      // tem 2 condutores de fase, sem neutro necessariamente — uma
+      // carga monofásica (que precisa de fase+neutro) não se liga nele
+      // do mesmo jeito. Circuito tem que ser HOMOGÊNEO na ligação.
+      //
+      // FIX: particiona por ligação (mono/bi/tri) ANTES de agrupar —
+      // só cargas com a MESMA ligação declarada entram no mesmo
+      // circuito, mesmo sendo do mesmo tipo ILUM/TUG. Pode gerar mais
+      // de 1 circuito por tipo por cômodo agora (ex: "ILUM monofásico"
+      // + "ILUM bifásico" separados), o que é o comportamento correto.
       function agruparPorNatureza(entries: typeof ilumEntries, tipoLabel: 'ILUM' | 'TUG') {
         if (entries.length === 0) return
-        let grupo: typeof entries = []
-        let grupoVA = 0
-        const flush = () => {
-          if (grupo.length === 0) return
-          const precisaTri = grupo.some(g => g.fase === 'tri')
-          const precisaBi  = grupo.some(g => g.fase === 'bi')
-          const ligacao: TipoLigacao = precisaTri ? 'trifasica' : precisaBi ? 'bifasica' : 'monofasica'
+
+        const porLigacao: Record<'mono'|'bi'|'tri', typeof entries> = { mono: [], bi: [], tri: [] }
+        entries.forEach(cm => porLigacao[cm.fase].push(cm))
+
+        for (const faseKey of ['mono', 'bi', 'tri'] as const) {
+          const sub = porLigacao[faseKey]
+          if (sub.length === 0) continue
+          const ligacao: TipoLigacao = faseKey === 'tri' ? 'trifasica' : faseKey === 'bi' ? 'bifasica' : 'monofasica'
           const fasesDisp = fasesParaTipo(ligacao, projeto.sistema)
-          const descricoes = grupo.map(g => g.descricao || tipoLabel).join(', ')
-          circs.push({
-            id: crypto.randomUUID(),
-            descricao: `${tipoLabel}: ${descricoes} (${co.nome})`,
-            potencia_va: grupoVA,
-            fase: fasesDisp[fiPorTipo[tipoLabel]++ % fasesDisp.length],
-            ligacao,
-            tipo: tipoLabel as 'ILUM' | 'TUG',
-            comodo_id: co.id,
-            comprimento_m: comprimentoEstimado(co.tipo, tipoLabel as 'ILUM'|'TUG'),
-            n_agrup: 1,
-            abaixo_minimo_nbr: grupo.some(g => g.abaixo_nbr),
-            minimo_nbr_va: grupo.reduce((s, g) => s + g.nbr_min_va, 0),
+
+          let grupo: typeof entries = []
+          let grupoVA = 0
+          const flush = () => {
+            if (grupo.length === 0) return
+            const descricoes = grupo.map(g => g.descricao || tipoLabel).join(', ')
+            circs.push({
+              id: crypto.randomUUID(),
+              descricao: `${tipoLabel}: ${descricoes} (${co.nome})`,
+              potencia_va: grupoVA,
+              fase: fasesDisp[fiPorTipo[tipoLabel]++ % fasesDisp.length],
+              ligacao,
+              tipo: tipoLabel as 'ILUM' | 'TUG',
+              comodo_id: co.id,
+              comprimento_m: comprimentoEstimado(co.tipo, tipoLabel as 'ILUM'|'TUG'),
+              n_agrup: 1,
+              abaixo_minimo_nbr: grupo.some(g => g.abaixo_nbr),
+              minimo_nbr_va: grupo.reduce((s, g) => s + g.nbr_min_va, 0),
+            })
+            grupo = []; grupoVA = 0
+          }
+          sub.forEach(cm => {
+            const pot = cm.potencia_va * cm.qtd
+            if (grupoVA + pot > 800) flush()
+            grupo.push(cm); grupoVA += pot
           })
-          grupo = []; grupoVA = 0
+          flush()
         }
-        entries.forEach(cm => {
-          const pot = cm.potencia_va * cm.qtd
-          if (grupoVA + pot > 800) flush()
-          grupo.push(cm); grupoVA += pot
-        })
-        flush()
       }
 
       agruparPorNatureza(ilumEntries, 'ILUM')

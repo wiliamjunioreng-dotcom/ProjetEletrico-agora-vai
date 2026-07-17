@@ -63,7 +63,15 @@ describe('Agrupamento por natureza — ILUM/TUG acoplados, TUE sempre individual
     expect(tueCirc?.descricao).toContain('(motor)')
   })
 
-  it('Fase bifásica declarada numa carga do grupo ILUM força o circuito INTEIRO a ser bifásico', () => {
+  it('DESATUALIZADO→CORRIGIDO: fase bifásica declarada numa carga NÃO força mais o grupo inteiro — vira circuito SEPARADO (ver __tests__/circuitoHomogeneo.test.ts para a regra correta e completa)', () => {
+    // Este teste validava o comportamento antigo (escalonamento do
+    // circuito inteiro pra ligação mais exigente), identificado como
+    // fisicamente incoerente e corrigido: circuito bifásico tem 2
+    // condutores de fase, sem neutro necessariamente — uma carga
+    // monofásica declarada (que precisa fase+neutro) não pode ser
+    // empurrada pra lá só porque outra carga do grupo pede mais fase.
+    // Agora particiona por ligação ANTES de agrupar — 2 circuitos
+    // SEPARADOS, cada um homogêneo na própria ligação.
     const { addComodo, addCargaManual, gerarCircuitosDeComodos } = useProjectStore.getState()
     addComodo({ nome: 'Salão', tipo: 'Social', area_m2: 40, perimetro_m: 30, pe_direito_m: 3.0, ilum_va: 0, tug_va: 0 } as any)
     const salaId = useProjectStore.getState().comodos[0].id
@@ -71,7 +79,9 @@ describe('Agrupamento por natureza — ILUM/TUG acoplados, TUE sempre individual
     addCargaManual(salaId, { tipo: 'ILUM', descricao: 'Refletor 220V', potencia_va: 500, qtd: 1, fase: 'bi', abaixo_nbr: false, nbr_min_va: 0 } as any)
 
     gerarCircuitosDeComodos()
-    const ilumCirc = useProjectStore.getState().circuitos_raw.find(c => c.tipo === 'ILUM')
-    expect(ilumCirc?.ligacao).toBe('bifasica')
+    const ilumCircs = useProjectStore.getState().circuitos_raw.filter(c => c.tipo === 'ILUM')
+    expect(ilumCircs).toHaveLength(2)
+    expect(ilumCircs.find(c => c.ligacao === 'monofasica')?.descricao).toContain('Spot comum')
+    expect(ilumCircs.find(c => c.ligacao === 'bifasica')?.descricao).toContain('Refletor')
   })
 })
