@@ -189,11 +189,14 @@ function LuminariaSelector({
 }: {
   area_m2: number
   pe_m: number
-  onSelect: (pot_dim_va: number, pot_real_w: number, desc: string) => void
+  // Retorna dados completos pra persistir uma LuminariaInstalada real —
+  // não mais só o VA de dimensionamento (que descartava tudo o resto)
+  onSelect: (item: { categoria: 'geral'|'efeito'; modelo_nome: string; qtd: number; pot_w: number; lm: number }) => void
   onClose: () => void
 }) {
   const [lux_alvo, setLux] = useState(300)
   const [lum_idx, setLumIdx] = useState(0)
+  const [categoria, setCategoria] = useState<'geral'|'efeito'>('geral')
   const modelo = CATALOGO_LUMINARIAS[lum_idx]
   const resultado = area_m2 > 0 && pe_m > 0 && modelo
     ? calcularLumens(area_m2, pe_m, lux_alvo, modelo)
@@ -212,7 +215,15 @@ function LuminariaSelector({
         <button className="btn ghost icon" onClick={onClose}>×</button>
       </div>
 
-      <div className="form-grid c3" style={{ marginBottom: 10 }}>
+      <div className="form-grid c4" style={{ marginBottom: 10 }}>
+        <div className="fgroup">
+          <label className="flabel">Categoria</label>
+          <select className="fselect" value={categoria} onChange={e => setCategoria(e.target.value as any)}
+            title="Geral conta pro mínimo funcional de lux do ambiente; efeito é decorativa, soma na carga mas não no mínimo">
+            <option value="geral">Geral</option>
+            <option value="efeito">Efeito (decorativa)</option>
+          </select>
+        </div>
         <div className="fgroup">
           <label className="flabel">Iluminância alvo (lux)</label>
           <select className="fselect" value={lux_alvo}
@@ -235,8 +246,8 @@ function LuminariaSelector({
           <label className="flabel">Resultado</label>
           <div className="finput" style={{ background: 'var(--surface3)', color: resultado ? 'var(--green)' : 'var(--text4)', display: 'flex', alignItems: 'center' }}>
             {resultado
-              ? `${resultado.n_luminarias} un × ${modelo.pot}W = ${resultado.pot_dim_va.toFixed(0)}VA`
-              : 'Preencha área e pé direito'}
+              ? `${resultado.n_luminarias} un × ${modelo.pot}W`
+              : 'Preencha área/pé-direito'}
           </div>
         </div>
       </div>
@@ -248,14 +259,13 @@ function LuminariaSelector({
           </div>
           <button className="btn primary" style={{ height: 28 }}
             onClick={() => {
-              onSelect(
-                resultado.pot_dim_va,
-                resultado.pot_total_w,
-                `${resultado.n_luminarias}× ${modelo.nome} (${lux_alvo}lux)`
-              )
+              onSelect({
+                categoria, modelo_nome: modelo.nome,
+                qtd: resultado.n_luminarias, pot_w: modelo.pot, lm: modelo.lm,
+              })
               onClose()
             }}>
-            Aplicar
+            Adicionar ao cômodo
           </button>
         </div>
       )}
@@ -966,7 +976,7 @@ export function Comodos() {
           // pra ILUM/TUG desse cômodo. Carga manual, quando existe pro
           // tipo, SEMPRE substitui o valor calculado na criação — sem
           // isso visível, ninguém sabe qual número está sendo usado.
-          const temIlumManual = (c.cargas_manuais ?? []).some(cm => cm.tipo === 'ILUM')
+          const temIlumManual = (c.cargas_manuais ?? []).some(cm => cm.tipo === 'ILUM') || (c.luminarias ?? []).length > 0
           const temTugManual  = (c.cargas_manuais ?? []).some(cm => cm.tipo === 'TUG')
 
           return (
@@ -976,9 +986,17 @@ export function Comodos() {
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 }}>
                   <LuminariaSelector
                     area_m2={c.area_m2}
-                    pe_m={(c as any).pe_m ?? 2.7}
-                    onSelect={(pot_dim_va, _pot_real_w, _desc) => {
-                      updateComodo(c.id, { ilum_va: pot_dim_va })
+                    pe_m={c.pe_direito_m || 2.8}
+                    onSelect={(item) => {
+                      const novaLista = [...(c.luminarias ?? []), { id: crypto.randomUUID(), ...item }]
+                      // ilum_va = soma de TODAS as luminárias declaradas (geral + efeito),
+                      // mesma fórmula de dimensionamento (1,8× real ou 100VA/ponto, o maior)
+                      // — agora aplicada ao total acumulado, não a um cálculo isolado que
+                      // se perdia a cada nova luminária adicionada.
+                      const potRealTotal = novaLista.reduce((s, l) => s + l.qtd * l.pot_w, 0)
+                      const nTotal = novaLista.reduce((s, l) => s + l.qtd, 0)
+                      const novoIlumVa = Math.max(Math.ceil(potRealTotal * 1.8), nTotal * 100)
+                      updateComodo(c.id, { luminarias: novaLista, ilum_va: novoIlumVa })
                     }}
                     onClose={() => setLumModalComodo(null)}
                   />
@@ -1014,6 +1032,41 @@ export function Comodos() {
                   </button>
                 </div>
               </div>
+
+              {/* Luminárias declaradas — fonte única, real, persistente */}
+              {(c.luminarias ?? []).length > 0 && (
+                <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {(c.luminarias ?? []).map(lu => (
+                    <div key={lu.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                      <span className="badge" style={{
+                        background: lu.categoria === 'geral' ? 'var(--amber-dim)' : 'var(--purple-dim)',
+                        color: lu.categoria === 'geral' ? 'var(--amber)' : 'var(--purple)',
+                      }}>
+                        {lu.categoria === 'geral' ? 'Geral' : 'Efeito'}
+                      </span>
+                      <span style={{ flex: 1, color: 'var(--text2)' }}>
+                        {lu.qtd}× {lu.modelo_nome} — {lu.pot_w}W/{lu.lm}lm
+                      </span>
+                      <span style={{ color: 'var(--text4)', fontFamily: 'var(--mono)' }}>
+                        {lu.qtd * lu.pot_w}W
+                      </span>
+                      <button
+                        onClick={() => {
+                          const novaLista = (c.luminarias ?? []).filter(x => x.id !== lu.id)
+                          const potRealTotal = novaLista.reduce((s, l) => s + l.qtd * l.pot_w, 0)
+                          const nTotal = novaLista.reduce((s, l) => s + l.qtd, 0)
+                          const novoIlumVa = novaLista.length > 0
+                            ? Math.max(Math.ceil(potRealTotal * 1.8), nTotal * 100)
+                            : calcIlumComodo(c.area_m2)
+                          updateComodo(c.id, { luminarias: novaLista, ilum_va: novoIlumVa })
+                        }}
+                        style={{ background: 'none', border: 'none', color: 'var(--text4)', cursor: 'pointer', fontSize: 14 }}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Colunas: Real | Dimensionamento | Norma */}
               <div style={{ padding: '10px 14px' }}>

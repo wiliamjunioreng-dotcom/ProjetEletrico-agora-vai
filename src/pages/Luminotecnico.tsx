@@ -13,6 +13,12 @@ import { useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import { calcLuminotecnico } from '../core/engine'
 import type { LuminoInput } from '../core/engine'
+// Catálogo compartilhado — fonte única, mesma usada pelo seletor rápido
+// em Comodos.tsx. Corrigido: a reescrita anterior desta tela recriou um
+// catálogo próprio (LUMINARIAS local) em vez de importar este, mesmo o
+// arquivo já declarando explicitamente ser "usado por Luminotecnico.tsx
+// e pelo seletor de luminária no Comodos.tsx" — reconectado agora.
+import { CATALOGO_LUMINARIAS } from '../core/luminotecnico'
 
 // Iluminâncias recomendadas por ambiente (NBR ISO/CIE 8995-1 + NBR 5413)
 const ILUMINANCIAS: Record<string, { lux: number; desc: string }> = {
@@ -47,17 +53,12 @@ function sugerirCategoriaAmbiente(tipoComodo: string): string {
   return 'Sala de estar'
 }
 
-// Luminárias típicas para seleção
-const LUMINARIAS = [
-  { nome: 'LED Painel 40W/3600lm', pot: 40,  lm: 3600 },
-  { nome: 'LED Downlight 20W/2000lm', pot: 20, lm: 2000 },
-  { nome: 'LED Downlight 9W/900lm',  pot: 9,  lm: 900  },
-  { nome: 'LED Tube T8 18W/1800lm',  pot: 18, lm: 1800 },
-  { nome: 'LED Tube T8 9W/900lm',    pot: 9,  lm: 900  },
-  { nome: 'LED Spot 7W/600lm',       pot: 7,  lm: 600  },
-  { nome: 'LED High Bay 100W/12000lm',pot:100, lm:12000 },
-  { nome: 'Personalizada',           pot: 0,  lm: 0    },
-]
+// LUMINARIAS local removida — usa CATALOGO_LUMINARIAS (importado acima),
+// mesmo catálogo do seletor rápido em Comodos.tsx. Formato compatível:
+// ModeloLuminaria = { nome, pot, lm, obs? } — mesmos campos pot/lm que
+// o código abaixo já esperava, então nenhuma outra mudança necessária
+// além do import.
+const LUMINARIAS = CATALOGO_LUMINARIAS
 
 // Deriva comprimento e largura a partir de área e perímetro REAIS do
 // cômodo, resolvendo o sistema comp×larg=área, comp+larg=perímetro/2
@@ -288,6 +289,26 @@ export function Luminotecnico() {
                   ×
                 </button>
               </div>
+
+              {/* Luminárias REAIS já declaradas neste cômodo (em Cômodos e
+                  Cargas) — mostradas lado a lado com o cálculo hipotético
+                  abaixo, para comparação honesta. Não mescladas num único
+                  número: são dois modos diferentes (o que já foi decidido
+                  vs. o que o Método dos Lúmens sugere para a luminária
+                  escolhida aqui) e forçar isso numa única cifra arriscaria
+                  confundir mais do que ajudar. */}
+              {(comodo.luminarias ?? []).length > 0 && (() => {
+                const reais = comodo.luminarias!
+                const lmTotal = reais.reduce((s, l) => s + l.qtd * l.lm, 0)
+                const potTotal = reais.reduce((s, l) => s + l.qtd * l.pot_w, 0)
+                const nTotal = reais.reduce((s, l) => s + l.qtd, 0)
+                return (
+                  <div style={{ padding: '8px 14px', background: 'var(--gold-dim)', fontSize: 10.5, color: 'var(--gold-dark)', borderBottom: '1px solid var(--border-light)' }}>
+                    📌 Já declarado em Cômodos: {nTotal} luminária(s) real(is), {potTotal}W, {lmTotal.toLocaleString('pt-BR')}lm totais.
+                    O cálculo abaixo é hipotético (luminária escolhida aqui) — compare com o que já foi decidido.
+                  </div>
+                )
+              })()}
 
               {/* Resultado resumido */}
               <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>

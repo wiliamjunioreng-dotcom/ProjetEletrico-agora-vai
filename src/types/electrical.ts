@@ -190,6 +190,27 @@ export interface Comodo {
 
   // Luminotécnico (opcional)
   lumino?: LuminoData
+
+  // Luminárias REALMENTE declaradas neste cômodo — fonte única para
+  // dimensionamento (ilum_va) E para análise luminotécnica (lux
+  // atingido). Antes existiam 3 catálogos/fluxos desconectados: o
+  // seletor rápido "Método dos Lúmens" descartava o detalhe depois de
+  // calcular, o modo "por luminária" na criação não persistia nada
+  // reaproveitável, e a tela Luminotécnico mantinha seu próprio
+  // catálogo hipotético sem ligação com o que de fato foi declarado
+  // aqui. Categoria distingue iluminação geral (define o mínimo
+  // funcional do ambiente) de efeito (decorativa, somada à carga mas
+  // não contabilizada como atendendo o mínimo de lux).
+  luminarias?: LuminariaInstalada[]
+}
+
+export interface LuminariaInstalada {
+  readonly id:          string
+  readonly categoria:   'geral' | 'efeito'
+  readonly modelo_nome: string   // nome do catálogo, ou "Personalizada"
+  readonly qtd:         number
+  readonly pot_w:       number   // W por unidade
+  readonly lm:          number   // lúmens por unidade
 }
 
 // Carga manual: criada pelo engenheiro, persiste no cômodo

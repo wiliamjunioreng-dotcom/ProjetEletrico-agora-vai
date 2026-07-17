@@ -352,12 +352,31 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   updateComodo: (id, partial) => {
+    // BUG CRITICO CORRIGIDO: esta função recalculava ilum_va/tug_va do
+    // minimo NBR INCONDICIONALMENTE, mesmo quando o chamador passava um
+    // valor explicito em partial - descartando silenciosamente qualquer
+    // override manual (luminarias declaradas, ferramenta "Metodo dos
+    // Lumens", etc). Achado ao escrever teste de integracao para a
+    // consolidacao de luminarias: o valor persistido nunca batia com o
+    // que a UI acabava de calcular e enviar.
+    // FIX: só recalcula do automatico quando o chamador NAO forneceu um
+    // valor explicito em partial E o comodo nao tem luminarias
+    // declaradas (que já governam ilum_va por conta própria) - preserva
+    // o comportamento original (recalcular ao editar área/perímetro)
+    // para o caso comum, sem apagar decisões deliberadas.
     set(s => ({
       comodos: s.comodos.map(c => {
         if (c.id !== id) return c
         const u = { ...c, ...partial }
-        u.ilum_va = calcIlumComodo(u.area_m2)
-        u.tug_va  = calcTugComodo(u.perimetro_m, u.tipo, u.area_m2)
+        const ilumExplicito = (partial as any).ilum_va !== undefined
+        const tugExplicito  = (partial as any).tug_va !== undefined
+        const temLuminarias = (u.luminarias ?? []).length > 0
+        if (!ilumExplicito && !temLuminarias) {
+          u.ilum_va = calcIlumComodo(u.area_m2)
+        }
+        if (!tugExplicito) {
+          u.tug_va = calcTugComodo(u.perimetro_m, u.tipo, u.area_m2)
+        }
         return u
       }),
       modificado: true,
