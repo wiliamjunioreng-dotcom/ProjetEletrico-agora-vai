@@ -94,45 +94,114 @@ ipcMain.handle('export-qdfl', async (_, { data }) => {
   if (canceled || !filePath) return { ok: false }
 
   try {
-    const XLSX = require('xlsx')
-    const wb   = XLSX.utils.book_new()
+    // Trocado de 'xlsx' (SheetJS Community Edition) para 'exceljs' —
+    // confirmado experimentalmente que a versão gratuita do xlsx
+    // DESCARTA estilo de célula silenciosamente ao escrever (bold/cor/
+    // borda somem, sem erro nenhum) — por isso o QDFL sempre saiu como
+    // despejo de dado cru, sem nenhuma aparência de documento pronto.
+    const ExcelJS = require('exceljs')
+    const wb = new ExcelJS.Workbook()
+    wb.creator = 'Lumen - Projeto Elétrico'
+    wb.created = new Date()
 
-    const rows = data.circuitos.map((c, i) => ({
-      'N':          i + 1,
-      'Descricao':  c.descricao,
-      'Tipo':       c.tipo,
-      'Fase':       c.fase,
-      'V':          c.tensao_v,
-      'Ib(A)':      c.ib,
-      'Ft':         c.ft,
-      'Fa':         c.fa,
-      'Secao(mm2)': c.secao_fase,
-      'PE(mm2)':    c.secao_pe,
-      'In(A)':      c.in_disj,
-      "Iz'(A)":     c.iz_efetiva,
-      'dU(%)':      c.du_calc,
-      'Status':     c.status,
-      'IDR':        c.idr ? '30mA' : '-',
-    }))
+    const AZUL_MARCA   = 'FF1F4E78'
+    const AZUL_CLARO    = 'FFEEF4FF'
+    const VERDE_OK      = 'FF157A4A'
+    const VERMELHO_ERRO = 'FFC0392B'
+    const CINZA_BORDA   = 'FFD0D0D0'
+    const bordaFina = { style: 'thin', color: { argb: CINZA_BORDA } }
 
-    const ws = XLSX.utils.json_to_sheet(rows)
-    ws['!cols'] = [
-      {wch:4},{wch:40},{wch:6},{wch:6},{wch:6},
-      {wch:8},{wch:6},{wch:6},{wch:10},{wch:8},
-      {wch:8},{wch:8},{wch:7},{wch:8},{wch:6},
-    ]
-    XLSX.utils.book_append_sheet(wb, ws, 'QDFL')
+    const ws = wb.addWorksheet('QDFL', { views: [{ state: 'frozen', ySplit: 4 }] })
+    const colunas = ['N','Descrição','Tipo','Fase','V','Ib(A)','Ft','Fa',
+      'Seção(mm²)','PE(mm²)','In(A)',"Iz'(A)",'dU(%)','Status','IDR']
+    ws.columns = [
+      {wch:4},{wch:44},{wch:7},{wch:6},{wch:6},{wch:8},{wch:6},{wch:6},
+      {wch:11},{wch:9},{wch:8},{wch:8},{wch:7},{wch:9},{wch:7},
+    ].map((w, i) => ({ key: colunas[i], width: w.wch }))
+
+    // Linha 1 — título com nome do projeto
+    ws.mergeCells('A1:O1')
+    const tituloCell = ws.getCell('A1')
+    tituloCell.value = `QDFL — ${data.projeto?.nome || 'Projeto sem nome'}`
+    tituloCell.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } }
+    tituloCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL_MARCA } }
+    tituloCell.alignment = { vertical: 'middle', horizontal: 'left' }
+    ws.getRow(1).height = 26
+
+    // Linha 2 — subtítulo (projetista, CREA, data)
+    ws.mergeCells('A2:O2')
+    const subCell = ws.getCell('A2')
+    const partes = []
+    if (data.projeto?.projetista) partes.push(`Projetista: ${data.projeto.projetista}`)
+    if (data.projeto?.crea) partes.push(`CREA: ${data.projeto.crea}`)
+    partes.push(`Emitido em ${new Date().toLocaleDateString('pt-BR')}`)
+    subCell.value = partes.join('   ·   ')
+    subCell.font = { italic: true, size: 9, color: { argb: 'FF5A5670' } }
+    ws.getRow(2).height = 16
+
+    // Linha 3 — em branco (respiro)
+    ws.getRow(3).height = 4
+
+    // Linha 4 — cabeçalho de verdade
+    const headerRow = ws.getRow(4)
+    colunas.forEach((label, i) => {
+      const cell = headerRow.getCell(i + 1)
+      cell.value = label
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL_MARCA } }
+      cell.alignment = { vertical: 'middle', horizontal: i === 1 ? 'left' : 'center' }
+      cell.border = { top: bordaFina, bottom: bordaFina, left: bordaFina, right: bordaFina }
+    })
+    headerRow.height = 20
+
+    // Linhas de dado — borda em toda célula, zebra sutil, status colorido
+    data.circuitos.forEach((c, i) => {
+      const row = ws.getRow(5 + i)
+      const valores = [
+        i + 1, c.descricao, c.tipo, c.fase, c.tensao_v, c.ib, c.ft, c.fa,
+        c.secao_fase, c.secao_pe, c.in_disj, c.iz_efetiva, c.du_calc,
+        c.status, c.idr ? '30mA' : '-',
+      ]
+      valores.forEach((v, j) => {
+        const cell = row.getCell(j + 1)
+        cell.value = v
+        cell.border = { top: bordaFina, bottom: bordaFina, left: bordaFina, right: bordaFina }
+        cell.alignment = { vertical: 'middle', horizontal: j === 1 ? 'left' : 'center' }
+        if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL_CLARO } }
+      })
+      const statusCell = row.getCell(14)
+      statusCell.font = { bold: true, color: { argb: c.status === 'OK' ? VERDE_OK : VERMELHO_ERRO } }
+    })
 
     if (data.demanda) {
-      const dem = XLSX.utils.aoa_to_sheet([
-        ['CI (kW)', 'FD', 'Demanda (kW)', 'In geral (A)', 'Tipo CEMIG', 'QD posicoes'],
-        [data.demanda.ci_kw, data.demanda.fd, data.demanda.dem_kw,
-         data.demanda.in_geral, data.demanda.tipo_ligacao_cemig, data.demanda.n_total_qd],
-      ])
-      XLSX.utils.book_append_sheet(wb, dem, 'Demanda')
+      const dem = wb.addWorksheet('Demanda')
+      dem.mergeCells('A1:F1')
+      dem.getCell('A1').value = `Demanda — ${data.projeto?.nome || 'Projeto'}`
+      dem.getCell('A1').font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }
+      dem.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL_MARCA } }
+      dem.getRow(1).height = 24
+
+      const demCols = ['CI (kW)', 'FD', 'Demanda (kW)', 'In geral (A)', 'Tipo CEMIG', 'QD posições']
+      const demVals = [data.demanda.ci_kw, data.demanda.fd, data.demanda.dem_kw,
+        data.demanda.in_geral, data.demanda.tipo_ligacao_cemig, data.demanda.n_total_qd]
+      demCols.forEach((label, i) => {
+        const cell = dem.getRow(3).getCell(i + 1)
+        cell.value = label
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL_MARCA } }
+        cell.border = { top: bordaFina, bottom: bordaFina, left: bordaFina, right: bordaFina }
+        cell.alignment = { horizontal: 'center' }
+        dem.getColumn(i + 1).width = 14
+      })
+      demVals.forEach((v, i) => {
+        const cell = dem.getRow(4).getCell(i + 1)
+        cell.value = v
+        cell.border = { top: bordaFina, bottom: bordaFina, left: bordaFina, right: bordaFina }
+        cell.alignment = { horizontal: 'center' }
+      })
     }
 
-    XLSX.writeFile(wb, filePath)
+    await wb.xlsx.writeFile(filePath)
     return { ok: true, path: filePath }
   } catch (e) {
     return { ok: false, error: e.message }

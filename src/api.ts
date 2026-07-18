@@ -55,6 +55,7 @@ export const api = {
   async exportQDFLExcel(data: {
     circuitos: any[]
     demanda: any
+    projeto?: { nome?: string; projetista?: string; crea?: string }
   }): Promise<{ ok: boolean; path?: string; error?: string }> {
     if (!isElectron) return { ok: false, error: 'Exportação nativa só disponível no app Electron' }
     return (window as any).electronAPI.exportQDFL(data)

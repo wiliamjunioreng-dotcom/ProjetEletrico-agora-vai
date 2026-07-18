@@ -49,7 +49,7 @@ export function QDFL() {
       // dos relatórios reportados como corrompidos no Excel).
       if (api.isElectron) {
         const ci = circuitos_calc.filter(c => c.potencia_va > 0)
-        const r = await api.exportQDFLExcel({ circuitos: ci, demanda })
+        const r = await api.exportQDFLExcel({ circuitos: ci, demanda, projeto: { nome: projeto.nome, projetista: (projeto as any).projetista, crea: (projeto as any).crea } })
         if (r.ok) {
           mostrarMsg(`Excel salvo em: ${r.path}`, 'ok')
           return
