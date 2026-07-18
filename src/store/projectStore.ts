@@ -303,7 +303,8 @@ const projetoDefault: ProjectState['projeto'] = {
   modificado_em:     new Date().toISOString(),
 }
 
-function calcCircuito(raw: RawCircuit, proj: ProjectState['projeto']): CircuitResult {
+function calcCircuito(raw: RawCircuit, proj: ProjectState['projeto'], comodos?: ProjectState['comodos']): CircuitResult {
+  const comodo_tipo = comodos?.find(c => c.id === raw.comodo_id)?.tipo
   return dimensionarCircuito({
     ...raw,
     v_fase:      proj.v_fase,
@@ -314,6 +315,7 @@ function calcCircuito(raw: RawCircuit, proj: ProjectState['projeto']): CircuitRe
     du_max:      proj.du_max_pct,
     du_ramal:    proj.du_ramal_pct,
     icc_rede_ka: proj.icc_rede_ka,
+    comodo_tipo,
   })
 }
 
@@ -812,9 +814,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   recalcular: () => {
-    const { circuitos_raw, projeto, rede } = get()
+    const { circuitos_raw, projeto, rede, comodos } = get()
     // Calcular legado (compatibilidade com páginas existentes)
-    const calc = circuitos_raw.map(r => calcCircuito(r, projeto))
+    const calc = circuitos_raw.map(r => calcCircuito(r, projeto, comodos))
     const dem  = calcularDemanda(calc, projeto.v_fase, projeto.fp_global, projeto.sistema)
     // Solver determinístico puro (novo — não muta domínio)
     const estado = solve({

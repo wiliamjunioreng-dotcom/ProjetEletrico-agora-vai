@@ -264,3 +264,20 @@ describe('CASA COMPLETA — 10 cômodos, ponta a ponta', () => {
     expect(totalVA).toBeGreaterThan(10000)  // casa real, deve passar de 10kW instalados
   })
 })
+
+describe('CASA COMPLETA — investigação adicional pedida pelo usuário', () => {
+  it('Breakdown de circuitos por tipo, e quais têm IDR (áreas molhadas)', () => {
+    const { circuitos_raw, circuitos_calc } = useProjectStore.getState()
+    const porTipo: Record<string, number> = {}
+    circuitos_raw.forEach(c => { porTipo[c.tipo] = (porTipo[c.tipo] ?? 0) + 1 })
+    console.log('Circuitos por tipo:', JSON.stringify(porTipo))
+
+    const comIdr = circuitos_calc.filter(c => c.idr)
+    console.log('Circuitos com IDR:', comIdr.map(c => c.descricao))
+
+    const fasesUsadas = new Set(circuitos_raw.map(c => c.fase))
+    console.log('Fases usadas (após fix RT):', [...fasesUsadas].sort())
+
+    expect(true).toBe(true)
+  })
+})

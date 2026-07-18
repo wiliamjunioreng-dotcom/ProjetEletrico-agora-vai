@@ -143,6 +143,9 @@ export interface EntradaCircuito {
   // Tabela 41 — resistividade térmica do solo (K.m/W), só relevante
   // para métodos enterrados D1/D2. Omitido = padrão 2,5 K.m/W (Fsolo=1,0).
   readonly resistividade_solo_km_w?: number
+  // Tipo do cômodo de origem — mesmo motivo de engine.ts: permite
+  // detectar área molhada pelo LOCAL, não só pelo texto da descrição.
+  readonly comodo_tipo?: string
   // §6.2.5.6.1 — taxa de 3ª harmônica (%), só relevante para trifásico
   // com neutro (fase RST) alimentando carga concentrada de eletrônica/LED.
   readonly terceira_harmonica_pct?: number
@@ -486,7 +489,7 @@ export function stageProtecao(
   // Inferir curva pelo tipo real da carga (corrigido: não mais 'B' para tudo)
   const sug_curva = inferirCurva(e.tipo, e.descricao?.toLowerCase())
   const curva = sug_curva.curva
-  const idr     = isMolhado(e.descricao)
+  const idr     = isMolhado(e.descricao, e.comodo_tipo)
   const idr_in  = idr ? getIDR(in_disj) : 0
 
   // ── Tripartida: In <= Iz' (NBR 5410 §5.1.3.1) ──────────────────

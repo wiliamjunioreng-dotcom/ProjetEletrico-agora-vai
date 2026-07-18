@@ -117,6 +117,12 @@ export interface CircuitInput {
   // enterrados D1/D2 (NBR 5410 Tabela 41). Se omitido, assume o padrão
   // normativo 2,5 K.m/W (Fsolo = 1,0, sem correção).
   resistividade_solo_km_w?: number
+  // Tipo do cômodo de origem — permite ehAreaMolhada() detectar área
+  // molhada pelo LOCAL, não só pelo texto da descrição (cobre TUE com
+  // descrição customizada que não menciona o cômodo nem bate com
+  // palavra-chave de equipamento — ex: "Máquina de lavar" numa
+  // Lavanderia real, que sem isso perdia o DR obrigatório).
+  comodo_tipo?: string
   // Taxa de 3ª harmônica (%) — §6.2.5.6.1. Só relevante para circuitos
   // trifásicos com neutro (fase RST) alimentando carga concentrada de
   // eletrônica/LED. DECLARADA pelo engenheiro; acima de 15%, aplica
@@ -310,7 +316,7 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
   if (e.override_motivo) r.override_motivo = e.override_motivo
 
   // 9. IDR
-  r.idr    = ehAreaMolhada(e.descricao)
+  r.idr    = ehAreaMolhada(e.descricao, e.comodo_tipo, e.tipo)
   r.idr_in = r.idr ? getIDR(r.in_disj) : 0
 
   // 10. V/A·km e distância
