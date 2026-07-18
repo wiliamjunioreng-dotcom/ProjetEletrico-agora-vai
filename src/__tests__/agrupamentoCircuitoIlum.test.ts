@@ -42,16 +42,56 @@ describe('Agrupamento de circuito ILUM por proximidade declarada', () => {
     expect(circCozinha!.id).not.toBe(circAlaSocial!.id)
   })
 
-  it('Sem nenhum grupo declarado → comportamento automático original preservado (agrupamento por ordem)', () => {
+  it('DECISÃO DE DESIGN REVISADA: sem rótulo declarado, cômodos NUNCA se agrupam automaticamente entre si', () => {
+    // Comportamento ANTERIOR: cômodos sem grupo_circuito_ilum ainda
+    // caíam num agrupamento automático por ORDEM DE CRIAÇÃO (até 3
+    // cômodos/800VA) — um fallback "de conveniência". Removido na
+    // unificação do agrupamento ILUM/TUG (mesma mudança que corrigiu
+    // o bug de cômodos com carga manual nunca respeitarem o rótulo
+    // declarado). Ordem de criação no formulário não tem NENHUMA
+    // relação com proximidade física real — agrupar por isso é uma
+    // heurística arbitrária que podia juntar ILUM de dois cômodos
+    // longe um do outro só porque foram cadastrados em sequência,
+    // dando falsa sensação de otimização. Contradiz o princípio que
+    // o próprio usuário estabeleceu: "o programa não tem visão da
+    // planta, quem decide o que agrupar é o engenheiro". Sem rótulo
+    // declarado agora = sem agrupamento automático, ponto — cada
+    // cômodo vira seu próprio circuito, comportamento previsível.
     const { addComodo, gerarCircuitosDeComodos } = useProjectStore.getState()
     addComodo({ nome: 'A', tipo: 'Social', area_m2: 10, perimetro_m: 14, pe_direito_m: 2.8, ilum_va: 100, tug_va: 300 } as any)
     addComodo({ nome: 'B', tipo: 'Social', area_m2: 10, perimetro_m: 14, pe_direito_m: 2.8, ilum_va: 100, tug_va: 300 } as any)
     gerarCircuitosDeComodos()
     const { circuitos_raw } = useProjectStore.getState()
     const ilumCircs = circuitos_raw.filter(c => c.tipo === 'ILUM')
-    // Ambos sem grupo → devem cair no mesmo circuito automático (2 cômodos, dentro do limite de 3/800VA)
+    expect(ilumCircs).toHaveLength(2)
+    expect(ilumCircs.find(c => c.descricao.includes('A'))).toBeDefined()
+    expect(ilumCircs.find(c => c.descricao.includes('B'))).toBeDefined()
+  })
+
+  it('NOVO: cômodo com carga manual (ex: TUE) TAMBÉM respeita o rótulo de ILUM/TUG — o bug real corrigido', () => {
+    // Reproduz o achado do teste da casa completa: "Sala de Estar" e
+    // "Sala de Jantar" com o MESMO grupo_circuito_ilum, mas AMBAS com
+    // cargas manuais de outros tipos (TUG, TUE) — antes, isso as
+    // excluía inteiramente do agrupamento por rótulo. Agora não.
+    const { addComodo, addCargaManual, gerarCircuitosDeComodos } = useProjectStore.getState()
+    addComodo({ nome: 'Sala Estar', tipo: 'Social', area_m2: 24, perimetro_m: 20, pe_direito_m: 2.8, ilum_va: 0, tug_va: 0, grupo_circuito_ilum: 'Área Social' } as any)
+    addComodo({ nome: 'Sala Jantar', tipo: 'Social', area_m2: 14, perimetro_m: 15, pe_direito_m: 2.8, ilum_va: 0, tug_va: 0, grupo_circuito_ilum: 'Área Social' } as any)
+    const ids = useProjectStore.getState().comodos.map(c => c.id)
+    addCargaManual(ids[0], { tipo: 'ILUM', descricao: 'Plafon sala estar', potencia_va: 150, qtd: 1, fase: 'mono', abaixo_nbr: false, nbr_min_va: 0 } as any)
+    addCargaManual(ids[0], { tipo: 'TUE', descricao: 'AC sala', potencia_va: 1200, qtd: 1, fase: 'bi', abaixo_nbr: false, nbr_min_va: 0 } as any)
+    addCargaManual(ids[1], { tipo: 'ILUM', descricao: 'Pendente jantar', potencia_va: 100, qtd: 1, fase: 'mono', abaixo_nbr: false, nbr_min_va: 0 } as any)
+
+    gerarCircuitosDeComodos()
+    const { circuitos_raw } = useProjectStore.getState()
+    const ilumCircs = circuitos_raw.filter(c => c.tipo === 'ILUM')
+    // As duas ILUM (de cômodos DIFERENTES, cada um com carga manual de
+    // outro tipo também) devem cair no MESMO circuito, pelo rótulo
     expect(ilumCircs).toHaveLength(1)
-    expect(ilumCircs[0].descricao).toContain('A')
-    expect(ilumCircs[0].descricao).toContain('B')
+    expect(ilumCircs[0].descricao).toContain('Plafon sala estar')
+    expect(ilumCircs[0].descricao).toContain('Pendente jantar')
+    expect(ilumCircs[0].potencia_va).toBe(250)
+    // TUE nunca agrupa, sempre vira seu próprio circuito
+    const tueCircs = circuitos_raw.filter(c => c.tipo === 'TUE')
+    expect(tueCircs).toHaveLength(1)
   })
 })

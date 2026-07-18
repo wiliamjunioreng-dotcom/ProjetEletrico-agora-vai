@@ -474,66 +474,100 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // e todos usam fasesParaTipo() como única fonte de verdade — nunca
     // mais um array de fases duplicado e potencialmente errado.
 
-    // ── Cargas manuais declaradas pelo engenheiro ─────────────────
-    // Quando o cômodo possui cargas_manuais[], usá-las diretamente
-    // (sobrepõem os valores NBR calculados)
+    // ── Cargas manuais + automático, UNIFICADOS por ILUM/TUG ─────────
+    // BUG CRÍTICO CORRIGIDO: o agrupamento por rótulo declarado
+    // (grupo_circuito_ilum/tug) só olhava para comodos_auto (cômodos
+    // SEM NENHUMA carga manual de NENHUM tipo) — um cômodo com só um
+    // TUE manual já ficava inteiramente fora do agrupamento por
+    // rótulo, mesmo que sua ILUM/TUG estivesse corretamente marcada
+    // com o mesmo rótulo de outro cômodo. Achado no teste da casa
+    // completa: "Sala de Estar" e "Sala de Jantar" com o MESMO
+    // grupo_circuito_ilum="Área Social" geraram 2 circuitos ILUM
+    // separados, não 1 — porque as duas salas tinham TUE/TUG manuais
+    // e caíam em comodos_com_cargas, nunca em comodos_auto.
     //
-    // AGRUPAMENTO POR NATUREZA — cargas de mesma natureza (ILUM entre
-    // si, TUG entre si) dentro do MESMO cômodo compartilham um único
-    // circuito, por economia de cabo. TUE nunca é agrupado — cada TUE
-    // é um circuito dedicado próprio, sempre (chuveiro, motor, ar-
-    // condicionado não devem compartilhar circuito com outra carga).
-    // GERAL também fica 1 circuito por entrada — tipo ambíguo demais
-    // para agrupar com segurança.
+    // FIX: uma única coleta por tipo (ILUM ou TUG), pegando de CADA
+    // cômodo a carga manual daquele tipo SE existir, senão o valor
+    // automático (ilum_va/tug_va) — independente do cômodo ter outras
+    // cargas manuais de outros tipos. Só depois disso agrupa por
+    // rótulo declarado, particiona por ligação (nunca mistura mono/
+    // bi/tri) e respeita o teto de 800VA — tudo num só caminho, para
+    // as duas fontes de dado convergirem de verdade.
     const comodos_com_cargas = comodos.filter(c => c.cargas_manuais?.length)
-    // Contadores de rotação de fase — UM POR TIPO (ILUM, TUG), fora do
-    // loop de cômodos para que a rotação R→S→T persista ENTRE cômodos
-    // diferentes (senão cada cômodo recomeçaria do zero e todos os
-    // primeiros circuitos de cada tipo cairiam sempre em R). Nunca
-    // compartilhado com TUE/GERAL nem com os blocos automáticos abaixo
-    // — cada bloco tem o seu, exatamente para não repetir o bug de
-    // desalinhamento corrigido nesta sessão.
-    const fiPorTipo = { ILUM: 0, TUG: 0 }
-    // BUG CORRIGIDO: contador único compartilhado entre TUE mono/bi/tri
-    // — mesmo padrão de desalinhamento já corrigido em outros 3 lugares
-    // desta sessão, nunca tinha sido aplicado aqui. Um TUE trifásico
-    // (fasesDisp de tamanho 1) "consumia" um passo do contador
-    // compartilhado sem precisar balancear nada, deslocando a rotação
-    // dos TUEs bifásicos seguintes — no teste da casa completa isso
-    // fez a rotação bifásica nunca alcançar RT (só RS e ST apareceram).
-    // FIX: um contador POR ligação, igual ao padrão já usado em
-    // agruparPorNatureza (ILUM/TUG).
-    const fiOutrasPorLigacao = { monofasica: 0, bifasica: 0, trifasica: 0 }
 
-    for (const co of comodos_com_cargas) {
-      const ilumEntries = co.cargas_manuais.filter(cm => cm.tipo === 'ILUM')
-      const tugEntries  = co.cargas_manuais.filter(cm => cm.tipo === 'TUG')
-      const outrasEntries = co.cargas_manuais.filter(cm => cm.tipo !== 'ILUM' && cm.tipo !== 'TUG')
+    interface ItemAgrupavel {
+      descricao: string; potencia_va: number; fase: 'mono' | 'bi' | 'tri'
+      comodo_id: string; comodo_nome: string; comodo_tipo: string
+      abaixo_nbr: boolean; nbr_min_va: number
+      lampadas?: any[]; potencia_real_w?: number
+    }
 
-      // Helper: agrupa cargas do MESMO tipo E MESMA ligação num único
-      // circuito (respeitando o limite de 800VA — mesmo teto usado no
-      // agrupamento automático de ILUM).
-      //
-      // BUG CORRIGIDO: a versão anterior juntava TODAS as cargas do
-      // tipo (ex: todo ILUM do cômodo) num grupo só, e quando alguma
-      // pedia mais fase, ESCALAVA o circuito inteiro pra essa exigência
-      // — um "Spot comum" monofásico podia acabar destinado a um
-      // circuito bifásico só porque um "Refletor 220V" bifásico estava
-      // no mesmo grupo. Fisicamente incoerente: um circuito bifásico
-      // tem 2 condutores de fase, sem neutro necessariamente — uma
-      // carga monofásica (que precisa de fase+neutro) não se liga nele
-      // do mesmo jeito. Circuito tem que ser HOMOGÊNEO na ligação.
-      //
-      // FIX: particiona por ligação (mono/bi/tri) ANTES de agrupar —
-      // só cargas com a MESMA ligação declarada entram no mesmo
-      // circuito, mesmo sendo do mesmo tipo ILUM/TUG. Pode gerar mais
-      // de 1 circuito por tipo por cômodo agora (ex: "ILUM monofásico"
-      // + "ILUM bifásico" separados), o que é o comportamento correto.
-      function agruparPorNatureza(entries: typeof ilumEntries, tipoLabel: 'ILUM' | 'TUG') {
-        if (entries.length === 0) return
+    function coletarItens(tipo: 'ILUM' | 'TUG'): { rotulo?: string; itens: ItemAgrupavel[] }[] {
+      const porRotulo = new Map<string, ItemAgrupavel[]>()
+      const semRotulo: ItemAgrupavel[] = []
 
-        const porLigacao: Record<'mono'|'bi'|'tri', typeof entries> = { mono: [], bi: [], tri: [] }
-        entries.forEach(cm => porLigacao[cm.fase].push(cm))
+      for (const co of comodos) {
+        const rotulo = (tipo === 'ILUM' ? (co as any).grupo_circuito_ilum : (co as any).grupo_circuito_tug)?.trim()
+        const manuais = (co.cargas_manuais ?? []).filter(cm => cm.tipo === tipo)
+        let itensDoComodo: ItemAgrupavel[] = []
+
+        if (manuais.length > 0) {
+          itensDoComodo = manuais.map(cm => ({
+            descricao: cm.descricao, potencia_va: cm.potencia_va * cm.qtd, fase: cm.fase,
+            comodo_id: co.id, comodo_nome: co.nome, comodo_tipo: co.tipo,
+            abaixo_nbr: cm.abaixo_nbr, nbr_min_va: cm.nbr_min_va,
+          }))
+        } else {
+          const va = tipo === 'ILUM' ? co.ilum_va : co.tug_va
+          if (va > 0) {
+            const lumino = (co as any).lumino
+            const realW = tipo === 'ILUM' && lumino ? Math.round((lumino.n_luminarias || 1) * lumino.luminaria_pot_w) : undefined
+            itensDoComodo = [{
+              descricao: `${tipo} ${co.nome}`, potencia_va: va, fase: 'mono',
+              comodo_id: co.id, comodo_nome: co.nome, comodo_tipo: co.tipo,
+              abaixo_nbr: false, nbr_min_va: va,
+              lampadas: (co as any).lampadas, potencia_real_w: realW,
+            }]
+          }
+        }
+
+        if (itensDoComodo.length === 0) continue
+        if (rotulo) {
+          if (!porRotulo.has(rotulo)) porRotulo.set(rotulo, [])
+          porRotulo.get(rotulo)!.push(...itensDoComodo)
+        } else {
+          semRotulo.push(...itensDoComodo)
+        }
+      }
+
+      const resultado: { rotulo?: string; itens: ItemAgrupavel[] }[] = []
+      for (const [rotulo, itens] of porRotulo) resultado.push({ rotulo, itens })
+      // Sem rótulo: cada CÔMODO permanece isolado dos demais — ausência
+      // de rótulo significa "engenheiro não declarou esses como
+      // próximos", não "agrupe automaticamente com qualquer outro".
+      const porComodoSemRotulo = new Map<string, ItemAgrupavel[]>()
+      for (const item of semRotulo) {
+        if (!porComodoSemRotulo.has(item.comodo_id)) porComodoSemRotulo.set(item.comodo_id, [])
+        porComodoSemRotulo.get(item.comodo_id)!.push(item)
+      }
+      for (const [, itens] of porComodoSemRotulo) resultado.push({ itens })
+      return resultado
+    }
+
+    // Contadores de rotação — um conjunto por TIPO (ILUM, TUG), cada
+    // um com 3 sub-contadores por ligação (nunca compartilhados entre
+    // tipos nem entre ligações — mesmo padrão anti-desalinhamento já
+    // corrigido nos outros blocos desta sessão).
+    const fiILUM = { monofasica: 0, bifasica: 0, trifasica: 0 }
+    const fiTUG  = { monofasica: 0, bifasica: 0, trifasica: 0 }
+
+    function gerarCircuitosAgrupados(tipo: 'ILUM' | 'TUG') {
+      const grupos = coletarItens(tipo)
+      const fiRef = tipo === 'ILUM' ? fiILUM : fiTUG
+
+      for (const { rotulo, itens } of grupos) {
+        const porLigacao: Record<'mono'|'bi'|'tri', ItemAgrupavel[]> = { mono: [], bi: [], tri: [] }
+        itens.forEach(it => porLigacao[it.fase].push(it))
 
         for (const faseKey of ['mono', 'bi', 'tri'] as const) {
           const sub = porLigacao[faseKey]
@@ -541,45 +575,52 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           const ligacao: TipoLigacao = faseKey === 'tri' ? 'trifasica' : faseKey === 'bi' ? 'bifasica' : 'monofasica'
           const fasesDisp = fasesParaTipo(ligacao, projeto.sistema)
 
-          let grupo: typeof entries = []
+          let grupo: ItemAgrupavel[] = []
           let grupoVA = 0
           const flush = () => {
             if (grupo.length === 0) return
-            const descricoes = grupo.map(g => g.descricao || tipoLabel).join(', ')
+            const nomesUnicos = [...new Set(grupo.map(g => g.comodo_nome))]
+            const lampGrupo = grupo.flatMap(g => g.lampadas ?? [])
+            const realW = grupo.reduce((s, g) => s + (g.potencia_real_w ?? 0), 0)
             circs.push({
               id: crypto.randomUUID(),
-              descricao: `${tipoLabel}: ${descricoes} (${co.nome})`,
+              descricao: `${tipo}: ${grupo.map(g => g.descricao).join(', ')}${rotulo ? ` [${rotulo}]` : ''} (${nomesUnicos.join(', ')})`,
               potencia_va: grupoVA,
-              fase: fasesDisp[fiPorTipo[tipoLabel]++ % fasesDisp.length],
+              potencia_real_w: realW > 0 ? realW : undefined,
+              lampadas: lampGrupo.length > 0 ? lampGrupo : undefined,
+              fase: fasesDisp[fiRef[ligacao]++ % fasesDisp.length],
               ligacao,
-              tipo: tipoLabel as 'ILUM' | 'TUG',
-              comodo_id: co.id,
-              comprimento_m: comprimentoEstimado(co.tipo, tipoLabel as 'ILUM'|'TUG'),
+              tipo,
+              comodo_id: grupo[0].comodo_id,
+              comprimento_m: comprimentoEstimado(grupo[0].comodo_tipo, tipo),
               n_agrup: 1,
               abaixo_minimo_nbr: grupo.some(g => g.abaixo_nbr),
               minimo_nbr_va: grupo.reduce((s, g) => s + g.nbr_min_va, 0),
-            })
+            } as any)
             grupo = []; grupoVA = 0
           }
-          sub.forEach(cm => {
-            const pot = cm.potencia_va * cm.qtd
-            if (grupoVA + pot > 800) flush()
-            grupo.push(cm); grupoVA += pot
+          sub.forEach(item => {
+            if (grupoVA + item.potencia_va > 800) flush()
+            grupo.push(item); grupoVA += item.potencia_va
           })
           flush()
         }
       }
+    }
 
-      agruparPorNatureza(ilumEntries, 'ILUM')
-      agruparPorNatureza(tugEntries, 'TUG')
+    gerarCircuitosAgrupados('ILUM')
+    gerarCircuitosAgrupados('TUG')
 
-      // TUE e GERAL — cada entrada É seu próprio circuito, sempre
+    // TUE e GERAL — cada entrada É seu próprio circuito, sempre (nunca
+    // agrupado, nem por rótulo — chuveiro/motor/ar-condicionado não
+    // devem compartilhar circuito com nada)
+    const fiOutrasPorLigacao = { monofasica: 0, bifasica: 0, trifasica: 0 }
+    for (const co of comodos_com_cargas) {
+      const outrasEntries = co.cargas_manuais.filter(cm => cm.tipo !== 'ILUM' && cm.tipo !== 'TUG')
       for (const cm of outrasEntries) {
         const pot = cm.potencia_va * cm.qtd
         const ligacao = cm.fase === 'tri' ? 'trifasica' : cm.fase === 'bi' ? 'bifasica' : 'monofasica'
         const fasesDisp = fasesParaTipo(ligacao as TipoLigacao, projeto.sistema)
-        // Anexar tipo_carga à descrição como palavra-chave para inferirCurva()
-        // reconhecer corretamente (motor→D, resistivo→B, etc.)
         const sufixoTipo = cm.tipo === 'TUE' && cm.tipo_carga && cm.tipo_carga !== 'geral'
           ? ` (${cm.tipo_carga})` : ''
         circs.push({
@@ -598,147 +639,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }
     }
 
-    // Cômodos sem cargas manuais → usar lógica NBR automática abaixo
-    const comodos_auto = comodos.filter(c => !c.cargas_manuais?.length)
-
-    // ILUM — agrupar até 3 cômodos ou 800VA por circuito
-    // potencia_real_w = soma da pot. real das lâmpadas (LED real)
-    // potencia_va     = pot. de dimensionamento (cabo/disjuntor)
-    //
-    // ORDEM DE PRIORIDADE PARA AGRUPAMENTO:
-    //   1. Cômodos com grupo_circuito_ilum DECLARADO — o engenheiro,
-    //      olhando a própria planta, decidiu quais cômodos ficam juntos
-    //      por proximidade física (economia de cabo). O sistema NÃO
-    //      detecta isso sozinho (domínio elétrico não tem acesso à
-    //      posição geométrica dos cômodos — são domínios separados por
-    //      design). Respeita o grupo à risca, mesmo que caiba mais de
-    //      um grupo dentro do limite de 800VA — a decisão do engenheiro
-    //      tem prioridade sobre a otimização automática.
-    //   2. Cômodos SEM grupo declarado — comportamento automático
-    //      original preservado (agrupamento sequencial por ordem de
-    //      criação, limite 3 cômodos/800VA). Continua existindo para
-    //      quem não quer se preocupar com isso — é só uma heurística
-    //      de conveniência, não substitui a decisão informada.
-    // Contador próprio do ILUM automático — persiste entre múltiplas
-    // chamadas (um grupo declarado por vez + o restante sem grupo),
-    // mas nunca compartilhado com nenhum outro bloco de geração.
-    let fiIlumAuto = 0
-    // Fases disponíveis via fasesParaTipo — mesma fonte de verdade
-    // usada em todo o resto do arquivo, nunca mais um array duplicado.
-    const fasesIlumAuto = fasesParaTipo('monofasica', projeto.sistema)
-
-    function gerarCircuitosILUMDeGrupo(lista: typeof comodos_auto, rotuloGrupo?: string) {
-      let grp: string[] = [], grpVA = 0, grpRealW = 0, grpId = '', grpComodos: string[] = []
-      const flush = () => {
-        if (grp.length === 0) return
-        const lampGrupo = grpComodos.flatMap((cid: string) => {
-          const com = comodos.find(x => x.id === cid)
-          return (com as any)?.lampadas ?? []
-        })
-        circs.push({
-          id: crypto.randomUUID(),
-          descricao: `ILUM: ${grp.join(', ')}${rotuloGrupo ? ` [${rotuloGrupo}]` : ''}`,
-          potencia_va:     grpVA,
-          potencia_real_w: grpRealW > 0 ? grpRealW : undefined,
-          lampadas:        lampGrupo.length > 0 ? lampGrupo : undefined,
-          minimo_nbr_va:   grpVA,
-          abaixo_minimo_nbr: false,
-          fase: fasesIlumAuto[fiIlumAuto++ % fasesIlumAuto.length],
-          comprimento_m: comprimentoEstimado(comodos.find(x => x.id === grpId)?.tipo ?? 'Sala', 'ILUM'),
-          n_agrup: 1, tipo: 'ILUM', comodo_id: grpId,
-        })
-        grp = []; grpVA = 0; grpRealW = 0; grpId = ''; grpComodos = []
-      }
-
-      lista.forEach(c => {
-        const lumino = (c as any).lumino
-        const realW  = lumino ? Math.round((lumino.n_luminarias || 1) * lumino.luminaria_pot_w) : 0
-        if (grp.length >= 3 || grpVA + c.ilum_va > 800) flush()
-        grp.push(c.nome); grpVA += c.ilum_va; grpRealW += realW
-        grpId = c.id; grpComodos.push(c.id)
-      })
-      flush()
-    }
-
-    const comodosComIlum = comodos_auto.filter(c => c.ilum_va > 0)
-    const gruposDeclarados = new Map<string, typeof comodos_auto>()
-    const semGrupo: typeof comodos_auto = []
-    comodosComIlum.forEach(c => {
-      const rotulo = (c as any).grupo_circuito_ilum?.trim()
-      if (rotulo) {
-        if (!gruposDeclarados.has(rotulo)) gruposDeclarados.set(rotulo, [])
-        gruposDeclarados.get(rotulo)!.push(c)
-      } else {
-        semGrupo.push(c)
-      }
-    })
-    // Cada grupo declarado vira seu(s) próprio(s) circuito(s) — nunca
-    // misturado com cômodos de outro grupo, mesmo que houvesse espaço
-    for (const [rotulo, lista] of gruposDeclarados) {
-      gerarCircuitosILUMDeGrupo(lista, rotulo)
-    }
-    // Resto cai no agrupamento automático de sempre
-    gerarCircuitosILUMDeGrupo(semGrupo)
-
-    // TUG — mesmo padrão de agrupamento por rótulo declarado que já
-    // existe para ILUM: cômodos com o MESMO grupo_circuito_tug dividem
-    // um único circuito (economia de cabo, decisão do engenheiro que
-    // vê a planta); sem rótulo, cai no comportamento original (1
-    // circuito por cômodo — nunca agrupado automaticamente, porque o
-    // sistema não sabe quais cômodos são fisicamente próximos).
-    let fiTugAuto = 0
-    const fasesTugAuto = fasesParaTipo('monofasica', projeto.sistema)
-
-    function gerarCircuitosTUGDeGrupo(lista: typeof comodos_auto, rotuloGrupo?: string) {
-      let grp: string[] = [], grpVA = 0, grpId = '', grpComodos: string[] = []
-      const flush = () => {
-        if (grp.length === 0) return
-        circs.push({
-          id: crypto.randomUUID(),
-          descricao: `TUG: ${grp.join(', ')}${rotuloGrupo ? ` [${rotuloGrupo}]` : ''}`,
-          potencia_va: grpVA,
-          fase: fasesTugAuto[fiTugAuto++ % fasesTugAuto.length],
-          ligacao: 'monofasica' as TipoLigacao,
-          comprimento_m: comprimentoEstimado(comodos.find(x => x.id === grpId)?.tipo ?? 'Sala', 'TUG'),
-          n_agrup: 1, tipo: 'TUG', comodo_id: grpId,
-        })
-        grp = []; grpVA = 0; grpId = ''; grpComodos = []
-      }
-      lista.forEach(c => {
-        // Só agrupa automaticamente (rótulo declarado) até o mesmo teto
-        // de 800VA/3 cômodos usado no ILUM — heurística de economia, não
-        // regra normativa (a norma não define VA máximo por circuito;
-        // isso vem do cabo/disjuntor escolhido, dimensionado à parte).
-        if (rotuloGrupo && (grp.length >= 3 || grpVA + c.tug_va > 800)) flush()
-        grp.push(c.nome); grpVA += c.tug_va
-        grpId = c.id; grpComodos.push(c.id)
-        // Sem rótulo: cada cômodo continua virando seu próprio circuito
-        // (comportamento original preservado) — flush imediato.
-        if (!rotuloGrupo) flush()
-      })
-      flush()
-    }
-
-    const comodosComTug = comodos_auto.filter(c => c.tug_va > 0)
-    const gruposTugDeclarados = new Map<string, typeof comodos_auto>()
-    const semGrupoTug: typeof comodos_auto = []
-    comodosComTug.forEach(c => {
-      const rotulo = (c as any).grupo_circuito_tug?.trim()
-      if (rotulo) {
-        if (!gruposTugDeclarados.has(rotulo)) gruposTugDeclarados.set(rotulo, [])
-        gruposTugDeclarados.get(rotulo)!.push(c)
-      } else {
-        semGrupoTug.push(c)
-      }
-    })
-    for (const [rotulo, lista] of gruposTugDeclarados) {
-      gerarCircuitosTUGDeGrupo(lista, rotulo)
-    }
-    gerarCircuitosTUGDeGrupo(semGrupoTug)
-
-    // TUE (array legado tues[]) — contador próprio, isolado dos demais
+    // TUE (array legado tues[]) — contador próprio, isolado dos demais.
+    // Itera TODOS os cômodos (não só comodos_auto) — tues[] é um campo
+    // legado independente de cargas_manuais; um cômodo com cargas
+    // manuais de outro tipo ainda pode ter tues[] de dados antigos
+    // importados, mesma correção de escopo aplicada ao ILUM/TUG acima.
     let fiTueAuto = 0
-    comodos_auto.forEach(c => {
+    comodos.forEach(c => {
       ;(c.tues ?? []).forEach(t => {
         // Ligação: respeita a seleção EXPLÍCITA do engenheiro (t.fase_ligacao)
         // quando informada — só cai para inferência automática por potência
