@@ -3,41 +3,17 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useProjectStore } from '../store/projectStore'
+import type { ItemOrc } from '../store/projectStore'
 import {
   parsearXLSX, parsearCSV,
   buscarPreco, salvarTabela, carregarTabela, limparTabela,
 } from '../core/sinapi'
-import type { TabelaPrecos, InsumoSINAPI, TipoDesonerado } from '../core/sinapi'
+import type { TabelaPrecos, TipoDesonerado } from '../core/sinapi'
 
 const UFs = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']
 
 // ── Tipos locais ──────────────────────────────────────────────────
 
-
-interface ItemOrc {
-  chave:   string
-  descr:   string
-  qtd:     number
-  unidade: string
-  // Material
-  preco_mat_sin?: number
-  preco_mat_set?: number
-  insumo_mat_sin?: InsumoSINAPI
-  insumo_mat_set?: InsumoSINAPI
-  match_mat_sin?: string
-  match_mat_set?: string
-  // Mão de obra
-  preco_mo_sin?: number
-  preco_mo_set?: number
-  insumo_mo_sin?: InsumoSINAPI
-  insumo_mo_set?: InsumoSINAPI
-  match_mo_sin?: string
-  match_mo_set?: string
-  // Edição manual
-  preco_mat_manual?: number
-  preco_mo_manual?:  number
-  ignorar?: boolean
-}
 
 // ── Gerar itens do orçamento ──────────────────────────────────────
 
@@ -94,13 +70,15 @@ const COR_MATCH: Record<string, string> = {
 }
 
 export function Precos() {
-  const { circuitos_calc, circuitos_raw, demanda, projeto } = useProjectStore()
+  const {
+    circuitos_calc, circuitos_raw, demanda, projeto,
+    orcamento_itens: itens, setOrcamentoItens: setItens,
+    orcamento_estado_uf: estado, setOrcamentoEstadoUf: setEstado,
+    orcamento_desoneracao: desoner, setOrcamentoDesoneracao: setDesoner,
+  } = useProjectStore()
 
   const [tabelaSin, setTabelaSin] = useState<TabelaPrecos | null>(null)
   const [tabelaSet, setTabelaSet] = useState<TabelaPrecos | null>(null)
-  const [itens,     setItens]     = useState<ItemOrc[]>([])
-  const [estado,    setEstado]    = useState('MG')
-  const [desoner,   setDesoner]   = useState<TipoDesonerado>('nao_desonerado')
   const [carregando, setCarregando] = useState<'SINAPI' | 'SETOP' | null>(null)
   const [buscando,   setBuscando]   = useState(false)
   const [msg,        setMsg]        = useState<{ txt: string; tipo: 'ok' | 'err' | 'info' } | null>(null)

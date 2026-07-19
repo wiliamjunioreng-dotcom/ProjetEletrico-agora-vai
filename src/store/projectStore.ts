@@ -7,6 +7,7 @@ import type { EstadoCalculado } from '../core/solver'
 import { analisarSegmento } from '../core/topologia'
 import type { Comodo, DemandaResult, FaseType, Projeto, Carga, CircuitoV3, TrechoEletroduto, RedeEletrica, NoTopologico, SegmentoEletroduto } from '../types/electrical'
 import type { CircuitResult } from '../core/engine'
+import type { InsumoSINAPI } from '../core/sinapi'
 
 export interface LampadaReal {
   id:       string
@@ -185,6 +186,34 @@ export function getTensaoCircuito(fase: FaseType, v_fase: number): number {
   return mono.includes(fase) ? v_fase : getVLinha(v_fase)
 }
 
+// Item do orçamento — movido de estado local do componente Precos.tsx
+// para o estado global do projeto. Antes disso, o orçamento (com
+// qualquer preço editado manualmente pelo engenheiro) se perdia ao
+// navegar para outra aba e voltar, e nunca era salvo no arquivo do
+// projeto — "salvar e continuar depois" simplesmente não funcionava
+// para essa parte.
+export interface ItemOrc {
+  chave:   string
+  descr:   string
+  qtd:     number
+  unidade: string
+  preco_mat_sin?: number
+  preco_mat_set?: number
+  insumo_mat_sin?: InsumoSINAPI
+  insumo_mat_set?: InsumoSINAPI
+  match_mat_sin?: string
+  match_mat_set?: string
+  preco_mo_sin?: number
+  preco_mo_set?: number
+  insumo_mo_sin?: InsumoSINAPI
+  insumo_mo_set?: InsumoSINAPI
+  match_mo_sin?: string
+  match_mo_set?: string
+  preco_mat_manual?: number
+  preco_mo_manual?:  number
+  ignorar?: boolean
+}
+
 interface ProjectState {
   projeto: Omit<Projeto, 'nodes' | 'edges' | 'comodos'>
   comodos: Comodo[]
@@ -194,6 +223,10 @@ interface ProjectState {
   pagina_atual: string
   circuito_foco_id: string | null   // circuito destacado pela auditoria
   historico: EntradaHistorico[]       // timeline de decisões técnicas
+  // Orçamento — persiste entre navegação de abas E no arquivo salvo
+  orcamento_itens: ItemOrc[]
+  orcamento_estado_uf: string
+  orcamento_desoneracao: 'nao_desonerado' | 'desonerado'
   modificado: boolean
   arquivo_path: string | null
   // Estado calculado pelo solver (imutável — nunca editar diretamente)
@@ -250,6 +283,10 @@ interface ProjectState {
   recalcular:     () => void
   balancearFases: () => void
   setFaseCircuito:(id: string, fase: FaseType) => void
+
+  setOrcamentoItens:       (itens: ItemOrc[] | ((prev: ItemOrc[]) => ItemOrc[])) => void
+  setOrcamentoEstadoUf:    (uf: string) => void
+  setOrcamentoDesoneracao: (d: 'nao_desonerado' | 'desonerado') => void
 
   salvarJSON:   () => string
   carregarJSON: (json: string) => void
@@ -328,6 +365,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   pagina_atual:   'dashboard',
   circuito_foco_id: null,
   historico: [],
+  orcamento_itens: [],
+  orcamento_estado_uf: 'MG',
+  orcamento_desoneracao: 'nao_desonerado',
   estado:    null,
   cargas:    [],
   circuitos: [],
@@ -1049,15 +1089,27 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ trechos: atualizados })
   },
 
+  setOrcamentoItens: (itens) => {
+    set(s => ({
+      orcamento_itens: typeof itens === 'function' ? itens(s.orcamento_itens) : itens,
+      modificado: true,
+    }))
+  },
+  setOrcamentoEstadoUf: (uf) => set({ orcamento_estado_uf: uf, modificado: true }),
+  setOrcamentoDesoneracao: (d) => set({ orcamento_desoneracao: d, modificado: true }),
+
   salvarJSON: () => {
     const { projeto, comodos, circuitos_raw } = get()
     const { cargas, circuitos: circuitosV3, trechos } = get()
+    const { orcamento_itens, orcamento_estado_uf, orcamento_desoneracao } = get()
     return JSON.stringify({
-      _meta: { app: 'ProjetEletrico', versao: '3.0', data: new Date().toISOString() },
+      _meta: { app: 'ProjetEletrico', versao: '3.1', data: new Date().toISOString() },
       projeto, comodos, circuitos: circuitos_raw,
       // v3
       cargas, circuitosV3, trechos,
       rede: get().rede,
+      // v3.1 — orçamento (antes se perdia ao navegar de aba, nunca salvava)
+      orcamento_itens, orcamento_estado_uf, orcamento_desoneracao,
     }, null, 2)
   },
 
@@ -1072,6 +1124,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       circuitos:      data.circuitosV3    ?? [],
       trechos:        data.trechos        ?? [],
       rede:           data.rede           ?? { nos: [], segmentos: [], caminhos: [] },
+      // Arquivos salvos antes da v3.1 não têm essas chaves — cai pro
+      // padrão em vez de quebrar, arquivo antigo continua abrindo normal
+      orcamento_itens:        data.orcamento_itens        ?? [],
+      orcamento_estado_uf:    data.orcamento_estado_uf    ?? 'MG',
+      orcamento_desoneracao:  data.orcamento_desoneracao  ?? 'nao_desonerado',
       modificado: false,
     })
     get().recalcular()
@@ -1084,6 +1141,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       estado:         null,
       cargas:         [], circuitos: [], trechos: [],
       rede:           { nos: [], segmentos: [], caminhos: [] },
+      orcamento_itens: [], orcamento_estado_uf: 'MG', orcamento_desoneracao: 'nao_desonerado',
       modificado: false, arquivo_path: null, pagina_atual: 'dashboard',
     })
   },

@@ -63,7 +63,8 @@ export function Shell({ children }: { children: ReactNode }) {
     circuitos_calc, salvarJSON, carregarJSON, resetar
   } = useProjectStore()
 
-  const [lastSaved, setLastSaved] = useState<string | null>(null)
+  const [lastSaved, setLastSaved]   = useState<string | null>(null)
+  const [lastBackup, setLastBackup] = useState<string | null>(null)
   const [theme, setTheme]         = useState<'light' | 'dark'>(
     () => (localStorage.getItem('pe_theme') as 'light' | 'dark') ?? 'light'
   )
@@ -78,12 +79,48 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [])
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Backup automático em localStorage — NÃO substitui salvar o arquivo
+  // manualmente (que é a fonte de verdade), mas evita perder tudo se
+  // o app fechar antes de alguém clicar em Salvar. O timer antigo
+  // chamava doSave(true), que montava o download mas só clicava
+  // if (!auto) — ou seja, no caminho automático nada era persistido
+  // de verdade, só o rótulo "salvo às" mentia que tinha acontecido.
   useEffect(() => {
     if (!modificado) return
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current)
-    autoSaveRef.current = setTimeout(() => { doSave(true) }, 30000)
+    autoSaveRef.current = setTimeout(() => {
+      try {
+        const json = useProjectStore.getState().salvarJSON()
+        localStorage.setItem('pe_backup_autosave', json)
+        localStorage.setItem('pe_backup_autosave_ts', new Date().toISOString())
+        setLastBackup(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+      } catch { /* backup silencioso — nunca interrompe o fluxo do usuário */ }
+    }, 30000)
     return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current) }
   }, [modificado, projeto, circuitos_calc])
+
+  // Ao abrir o app — se existir um backup local mais recente do que o
+  // projeto atual (recém-criado, ainda não modificado), oferece
+  // recuperar. Só pergunta uma vez por sessão de abertura do app.
+  useEffect(() => {
+    if (modificado) return
+    const backup = localStorage.getItem('pe_backup_autosave')
+    const ts = localStorage.getItem('pe_backup_autosave_ts')
+    if (!backup || !ts) return
+    try {
+      const dados = JSON.parse(backup)
+      const nomeBackup = dados?.projeto?.nome
+      if (!nomeBackup) return
+      const dataFormatada = new Date(ts).toLocaleString('pt-BR')
+      if (confirm(`Encontrei um backup automático de "${nomeBackup}" (${dataFormatada}), de uma sessão que talvez não tenha sido salva em arquivo. Restaurar esse backup?`)) {
+        useProjectStore.getState().carregarJSON(backup)
+      } else {
+        localStorage.removeItem('pe_backup_autosave')
+        localStorage.removeItem('pe_backup_autosave_ts')
+      }
+    } catch { /* backup corrompido — ignora silenciosamente */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const ci    = circuitos_calc.filter(c => c.potencia_va > 0)
   const n_ok  = ci.filter(c => c.status === 'OK').length
@@ -92,15 +129,24 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const passo_atual = STEP_MAP[pagina_atual] ?? 0
 
-  function doSave(auto = false) {
+  // Único caminho de salvar de verdade — sempre manual, sempre um
+  // clique real de download. O parâmetro "auto" foi removido porque
+  // não existe mais chamada automática aqui (essa virou o backup em
+  // localStorage acima, que é honesto sobre ser só uma rede de
+  // segurança, não um substituto de salvar o arquivo de fato).
+  function doSave() {
     const json = salvarJSON()
     const blob = new Blob([json], { type: 'application/json' })
     const a    = document.createElement('a')
     a.href     = URL.createObjectURL(blob)
     a.download = `${(projeto.nome || 'projeto').replace(/\s+/g, '_')}.projelec`
-    if (!auto) a.click()
+    a.click()
     URL.revokeObjectURL(a.href)
     setLastSaved(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+    // Salvou de verdade em arquivo — o backup de emergência não é mais necessário
+    localStorage.removeItem('pe_backup_autosave')
+    localStorage.removeItem('pe_backup_autosave_ts')
+    setLastBackup(null)
   }
 
   function handleAbrir() {
@@ -234,7 +280,13 @@ export function Shell({ children }: { children: ReactNode }) {
           </button>
           {lastSaved && (
             <div style={{ fontSize: 9.5, color: 'var(--sb-label)', marginTop: 6, textAlign: 'center', fontFamily: 'var(--mono)' }}>
-              salvo às {lastSaved}
+              ✓ salvo em arquivo às {lastSaved}
+            </div>
+          )}
+          {!lastSaved && lastBackup && (
+            <div style={{ fontSize: 9.5, color: 'var(--amber)', marginTop: 6, textAlign: 'center', fontFamily: 'var(--mono)' }}
+              title="Backup automático local — não substitui salvar o arquivo. Clique em Salvar pra garantir de verdade.">
+              ⚠ backup local às {lastBackup} — não é arquivo salvo
             </div>
           )}
         </div>
