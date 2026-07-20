@@ -65,6 +65,37 @@ export type TipoLigacao = 'monofasica' | 'bifasica' | 'trifasica'
 
 // Fases disponíveis por tipo de ligação E sistema da instalação
 // REGRA: carga monofásica → 1 fase | bifásica → 2 fases | trifásica → 3 fases
+// ── Integridade do arquivo salvo ──────────────────────────────────
+// Checksum simples (FNV-1a, não criptográfico — não precisa ser: o
+// objetivo é detectar CORRUPÇÃO ACIDENTAL — truncamento, cópia
+// incompleta, edição manual acidental — não adulteração maliciosa.
+// Calculado sobre o conteúdo canônico (JSON.stringify sem formatação
+// extra) dos dados do projeto, nunca sobre o arquivo formatado
+// inteiro — assim, reformatar o arquivo num editor de texto (mudar
+// espaçamento) não dispara falso positivo de corrupção.
+export function calcularChecksum(texto: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < texto.length; i++) {
+    hash ^= texto.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+// Validação estrutural — antes disso, carregarJSON só conferia
+// "data.projeto existe", o que deixa passar arquivos malformados
+// (ex: projeto como string, comodos como objeto em vez de array) que
+// quebrariam silenciosamente em algum lugar mais fundo do app depois.
+// Agora rejeita com mensagem clara ANTES de aplicar qualquer coisa.
+export function validarEstruturaArquivo(data: any): string | null {
+  if (typeof data !== 'object' || data === null) return 'Arquivo não é um projeto válido (JSON raiz não é um objeto).'
+  if (typeof data.projeto !== 'object' || data.projeto === null) return 'Campo "projeto" ausente ou corrompido.'
+  if (data.comodos !== undefined && !Array.isArray(data.comodos)) return 'Campo "comodos" corrompido (deveria ser uma lista).'
+  if (data.circuitos !== undefined && !Array.isArray(data.circuitos)) return 'Campo "circuitos" corrompido (deveria ser uma lista).'
+  if (data.orcamento_itens !== undefined && !Array.isArray(data.orcamento_itens)) return 'Campo "orcamento_itens" corrompido (deveria ser uma lista).'
+  return null  // sem problemas encontrados
+}
+
 export function fasesParaTipo(ligacao: TipoLigacao, sistema: string): FaseType[] {
   if (ligacao === 'monofasica') {
     if (sistema === 'Monofasico') return ['R']
@@ -289,7 +320,7 @@ interface ProjectState {
   setOrcamentoDesoneracao: (d: 'nao_desonerado' | 'desonerado') => void
 
   salvarJSON:   () => string
-  carregarJSON: (json: string) => void
+  carregarJSON: (json: string, ignorarAvisoIntegridade?: boolean) => void
   resetar:      () => void
   marcarSalvo:  (path: string) => void
 }
@@ -1102,20 +1133,53 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { projeto, comodos, circuitos_raw } = get()
     const { cargas, circuitos: circuitosV3, trechos } = get()
     const { orcamento_itens, orcamento_estado_uf, orcamento_desoneracao } = get()
-    return JSON.stringify({
-      _meta: { app: 'ProjetEletrico', versao: '3.1', data: new Date().toISOString() },
+    // Dados "puros" — exatamente o que será verificado por checksum no
+    // carregamento. Serializado SEM formatação (JSON.stringify simples,
+    // sem indentação) para dar um resultado determinístico — o arquivo
+    // final continua bonito/indentado, só o cálculo do checksum usa a
+    // forma compacta por baixo dos panos.
+    const dados = {
       projeto, comodos, circuitos: circuitos_raw,
-      // v3
       cargas, circuitosV3, trechos,
       rede: get().rede,
-      // v3.1 — orçamento (antes se perdia ao navegar de aba, nunca salvava)
       orcamento_itens, orcamento_estado_uf, orcamento_desoneracao,
+    }
+    const checksum = calcularChecksum(JSON.stringify(dados))
+    return JSON.stringify({
+      _meta: { app: 'ProjetEletrico', versao: '3.1', data: new Date().toISOString(), checksum },
+      ...dados,
     }, null, 2)
   },
 
-  carregarJSON: (json) => {
-    const data = JSON.parse(json)
-    if (!data.projeto) throw new Error('Arquivo invalido')
+  carregarJSON: (json, ignorarAvisoIntegridade = false) => {
+    let data: any
+    try {
+      data = JSON.parse(json)
+    } catch {
+      throw new Error('Arquivo corrompido — não é um JSON válido. O arquivo pode ter sido truncado ou danificado na cópia.')
+    }
+
+    const erroEstrutura = validarEstruturaArquivo(data)
+    if (erroEstrutura) throw new Error(`Arquivo inválido: ${erroEstrutura}`)
+
+    // Checksum — só verifica se o arquivo TEM um (arquivos salvos antes
+    // desta proteção não têm, e isso é esperado, não é motivo de aviso).
+    // Recalcula sobre EXATAMENTE os mesmos campos, na mesma forma, que
+    // salvarJSON() usou — reformatar o arquivo num editor não quebra
+    // isso, só edição/corrupção real do CONTEÚDO quebra.
+    if (data._meta?.checksum && !ignorarAvisoIntegridade) {
+      const dadosParaChecagem = {
+        projeto: data.projeto, comodos: data.comodos, circuitos: data.circuitos,
+        cargas: data.cargas, circuitosV3: data.circuitosV3, trechos: data.trechos,
+        rede: data.rede, orcamento_itens: data.orcamento_itens,
+        orcamento_estado_uf: data.orcamento_estado_uf, orcamento_desoneracao: data.orcamento_desoneracao,
+      }
+      const checksumCalculado = calcularChecksum(JSON.stringify(dadosParaChecagem))
+      if (checksumCalculado !== data._meta.checksum) {
+        throw new Error('AVISO_INTEGRIDADE: Este arquivo pode estar corrompido ou foi alterado fora do programa — a verificação de integridade não bateu. Os dados abaixo podem estar incompletos ou incorretos.')
+      }
+    }
+
     set({
       projeto:        { ...projetoDefault, ...data.projeto },
       comodos:        data.comodos        ?? [],

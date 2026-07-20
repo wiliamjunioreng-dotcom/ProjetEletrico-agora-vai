@@ -68,8 +68,32 @@ ipcMain.handle('save-project', async (_, { json, defaultName }) => {
     ],
   })
   if (canceled || !filePath) return { ok: false }
+  // Mesma proteção do overwrite-project — se já existe um arquivo
+  // nesse caminho (usuário escolheu sobrescrever algo existente pelo
+  // próprio diálogo do SO), guarda a versão anterior em .bak antes.
+  if (fs.existsSync(filePath)) {
+    try { fs.copyFileSync(filePath, filePath + '.bak') } catch { /* não bloqueia o salvamento por isso */ }
+  }
   fs.writeFileSync(filePath, json, 'utf-8')
   return { ok: true, path: filePath }
+})
+
+// ── IPC: Sobrescrever projeto (Salvar de verdade, sem reabrir
+// diálogo — igual Ctrl+S no Excel sobrescreve o mesmo arquivo).
+// Cuidado extra: antes de sobrescrever, copia o conteúdo ATUAL do
+// arquivo para um .bak — se a escrita nova falhar ou ficar
+// incompleta por qualquer motivo (queda de energia, disco cheio),
+// a versão anterior boa não é destruída junto.
+ipcMain.handle('overwrite-project', async (_, { json, filePath }) => {
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.copyFileSync(filePath, filePath + '.bak')
+    }
+    fs.writeFileSync(filePath, json, 'utf-8')
+    return { ok: true, path: filePath }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
 })
 
 // ── IPC: Abrir projeto ────────────────────────────────────────

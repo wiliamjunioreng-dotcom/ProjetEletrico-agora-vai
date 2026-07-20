@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { useProjectStore } from '../../store/projectStore'
+import { api } from '../../api'
 
 // ── Fluxo principal — mesmos 5 passos já estabelecidos no roteiro
 // do Dashboard, agora também representados no stepper da sidebar ──
@@ -60,7 +61,8 @@ function Icon({ d }: { d: string }) {
 export function Shell({ children }: { children: ReactNode }) {
   const {
     pagina_atual, setPagina, projeto, modificado,
-    circuitos_calc, salvarJSON, carregarJSON, resetar
+    circuitos_calc, salvarJSON, carregarJSON, resetar,
+    arquivo_path, marcarSalvo,
   } = useProjectStore()
 
   const [lastSaved, setLastSaved]   = useState<string | null>(null)
@@ -134,14 +136,8 @@ export function Shell({ children }: { children: ReactNode }) {
   // não existe mais chamada automática aqui (essa virou o backup em
   // localStorage acima, que é honesto sobre ser só uma rede de
   // segurança, não um substituto de salvar o arquivo de fato).
-  function doSave() {
-    const json = salvarJSON()
-    const blob = new Blob([json], { type: 'application/json' })
-    const a    = document.createElement('a')
-    a.href     = URL.createObjectURL(blob)
-    a.download = `${(projeto.nome || 'projeto').replace(/\s+/g, '_')}.projelec`
-    a.click()
-    URL.revokeObjectURL(a.href)
+  function marcarSalvoAgora(path?: string) {
+    if (path) marcarSalvo(path)
     setLastSaved(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
     // Salvou de verdade em arquivo — o backup de emergência não é mais necessário
     localStorage.removeItem('pe_backup_autosave')
@@ -149,15 +145,79 @@ export function Shell({ children }: { children: ReactNode }) {
     setLastBackup(null)
   }
 
-  function handleAbrir() {
+  // "Salvar" de verdade — no Electron, se já existe um caminho
+  // conhecido (projeto aberto ou já salvo uma vez nesta sessão),
+  // SOBRESCREVE DIRETO sem reabrir diálogo, igual Ctrl+S no Excel.
+  // forcarComo=true força o diálogo mesmo com caminho conhecido
+  // ("Salvar Como" — salvar uma cópia com outro nome/local).
+  async function doSave(forcarComo = false) {
+    const json = salvarJSON()
+    const nomeArquivo = `${(projeto.nome || 'projeto').replace(/\s+/g, '_')}.projelec`
+
+    if (api.isElectron) {
+      if (arquivo_path && !forcarComo) {
+        const r = await api.overwriteProject(json, arquivo_path, nomeArquivo)
+        if (r.ok) { marcarSalvoAgora(r.path); return }
+        alert('Não foi possível salvar: ' + (r.error || 'erro desconhecido') + '\n\nTente "Salvar Como" para escolher outro local.')
+        return
+      }
+      const r = await api.saveProject(json, nomeArquivo)
+      if (r.ok) marcarSalvoAgora(r.path)
+      return
+    }
+
+    // Fora do Electron (navegador puro) — navegador não deixa
+    // sobrescrever um arquivo em disco sem interação a cada vez;
+    // download é o máximo que dá pra fazer com segurança aqui.
+    const blob = new Blob([json], { type: 'application/json' })
+    const a    = document.createElement('a')
+    a.href     = URL.createObjectURL(blob)
+    a.download = nomeArquivo
+    a.click()
+    URL.revokeObjectURL(a.href)
+    marcarSalvoAgora()
+  }
+
+  function aplicarJSONCarregado(texto: string, path?: string) {
+    try {
+      carregarJSON(texto)
+      if (path) marcarSalvo(path)
+    } catch (err) {
+      const msg = (err as Error).message
+      // Aviso de integridade não é um arquivo necessariamente
+      // inutilizável — pode ser corrupção parcial recuperável. Avisa
+      // com clareza e deixa o usuário decidir, em vez de recusar
+      // e potencialmente perder um arquivo que ainda tem dados bons.
+      if (msg.startsWith('AVISO_INTEGRIDADE:')) {
+        const mensagemLimpa = msg.replace('AVISO_INTEGRIDADE: ', '')
+        if (confirm(`⚠ ${mensagemLimpa}\n\nAbrir mesmo assim?`)) {
+          try {
+            carregarJSON(texto, true)
+            if (path) marcarSalvo(path)
+          } catch (err2) {
+            alert('Não foi possível abrir mesmo forçando: ' + (err2 as Error).message)
+          }
+        }
+      } else {
+        alert('Arquivo inválido: ' + msg)
+      }
+    }
+  }
+
+  async function handleAbrir() {
+    if (api.isElectron) {
+      const r = await api.loadProject('')
+      if (r.ok && r.json) aplicarJSONCarregado(r.json, r.path)
+      return
+    }
     const inp = document.createElement('input')
     inp.type   = 'file'
     inp.accept = '.projelec,.json'
     inp.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file) return
-      try { carregarJSON(await file.text()) }
-      catch (err) { alert('Arquivo inválido: ' + (err as Error).message) }
+      const texto = await file.text()
+      aplicarJSONCarregado(texto)
     }
     inp.click()
   }
@@ -275,6 +335,12 @@ export function Shell({ children }: { children: ReactNode }) {
             <button className="sb-config-btn" style={{ flex: 1 }} onClick={handleAbrir}>Abrir</button>
             <button className="sb-config-btn" style={{ flex: 1 }} onClick={() => doSave()}>Salvar</button>
           </div>
+          {api.isElectron && arquivo_path && (
+            <button className="btn ghost" style={{ width: '100%', height: 22, fontSize: 10, marginTop: 4, justifyContent: 'center' }}
+              onClick={() => doSave(true)} title={`Arquivo atual: ${arquivo_path}`}>
+              Salvar como (nova cópia)...
+            </button>
+          )}
           <button className="sb-config-btn" style={{ marginTop: 6 }} onClick={handleNovo}>
             <span>+</span> Novo projeto
           </button>

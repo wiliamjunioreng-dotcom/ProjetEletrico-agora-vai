@@ -5,30 +5,53 @@ const isElectron = typeof window !== 'undefined' && !!(window as any).electronAP
 const BASE = 'http://127.0.0.1:3847'
 
 export const api = {
-  // Salvar projeto no disco
-  async saveProject(json: string, filename: string): Promise<{ ok: boolean; path?: string }> {
+  // Salvar projeto no disco. try/catch no caminho servidor-local:
+  // sem isso, se o servidor não estiver rodando (fetch rejeita com
+  // ECONNREFUSED), a exceção sobe sem tratamento — pode derrubar a
+  // tela que chamou isso em vez de mostrar um erro claro pro usuário.
+  async saveProject(json: string, filename: string): Promise<{ ok: boolean; path?: string; error?: string }> {
     if (isElectron) {
       return (window as any).electronAPI.saveProject(json, filename)
     }
-    const r = await fetch(`${BASE}/api/save`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ json, filename }),
-    })
-    return r.json()
+    try {
+      const r = await fetch(`${BASE}/api/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ json, filename }),
+      })
+      return r.json()
+    } catch (e) {
+      return { ok: false, error: 'Não foi possível conectar ao servidor local — verifique se o ProjetEletrico está rodando.' }
+    }
+  },
+
+  // Sobrescrever projeto JÁ ABERTO, sem reabrir diálogo — "Salvar" de
+  // verdade, igual Ctrl+S no Excel. Só existe de fato no Electron (o
+  // navegador não deixa escrever em disco sem interação explícita do
+  // usuário a cada vez); fora do Electron, cai pro saveProject normal
+  // (com diálogo), que é o máximo que o ambiente permite com segurança.
+  async overwriteProject(json: string, filePath: string, defaultName: string): Promise<{ ok: boolean; path?: string; error?: string }> {
+    if (isElectron) {
+      return (window as any).electronAPI.overwriteProject(json, filePath)
+    }
+    return this.saveProject(json, defaultName)
   },
 
   // Carregar projeto do disco
-  async loadProject(filepath: string): Promise<{ ok: boolean; json?: string }> {
+  async loadProject(filepath: string): Promise<{ ok: boolean; json?: string; path?: string; error?: string }> {
     if (isElectron) {
       return (window as any).electronAPI.openProject()
     }
-    const r = await fetch(`${BASE}/api/load`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filepath }),
-    })
-    return r.json()
+    try {
+      const r = await fetch(`${BASE}/api/load`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filepath }),
+      })
+      return r.json()
+    } catch (e) {
+      return { ok: false, error: 'Não foi possível conectar ao servidor local — verifique se o ProjetEletrico está rodando.' }
+    }
   },
 
   // Listar projetos salvos
