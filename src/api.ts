@@ -83,4 +83,13 @@ export const api = {
     if (!isElectron) return { ok: false, error: 'Exportação nativa só disponível no app Electron' }
     return (window as any).electronAPI.exportQDFL(data)
   },
+
+  // "Segunda opinião" — Excel com FÓRMULAS DE VERDADE, não valor
+  // estático. Consulte/altere qualquer célula amarela (entrada) e as
+  // fórmulas recalculam — inclui as tabelas reais da NBR 5410
+  // embutidas na própria planilha.
+  async exportMemorialFormulas(dados: any, nomeProjeto: string): Promise<{ ok: boolean; path?: string; error?: string }> {
+    if (!isElectron) return { ok: false, error: 'Exportação nativa só disponível no app Electron' }
+    return (window as any).electronAPI.exportMemorialFormulas(dados, nomeProjeto)
+  },
 }

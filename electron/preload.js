@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   overwriteProject: (json, filePath) => ipcRenderer.invoke('overwrite-project', { json, filePath }),
   openProject:  ()                  => ipcRenderer.invoke('open-project'),
   exportQDFL:   (data)              => ipcRenderer.invoke('export-qdfl', { data }),
+  exportMemorialFormulas: (dados, nomeProjeto) => ipcRenderer.invoke('export-memorial-formulas', { dados, nomeProjeto }),
   getAppInfo:   ()                  => ipcRenderer.invoke('get-app-info'),
 })

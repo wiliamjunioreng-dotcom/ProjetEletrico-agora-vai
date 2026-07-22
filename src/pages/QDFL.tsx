@@ -8,6 +8,7 @@ import {
   exportarQDFL_XLSX, exportarQDFL_CSV, exportarMemorial, exportarManualUsuario, exportarPlanoManutencao,
   exportarQDFL_Python, isServerMode
 } from '../core/exporters'
+import { prepararDadosMemorialFormulas } from '../core/memorialFormulas'
 
 export function QDFL() {
   const { circuitos_calc, circuitos_raw, demanda, projeto, salvarJSON, setPagina } = useProjectStore()
@@ -110,6 +111,21 @@ export function QDFL() {
     mostrarMsg('Memorial aberto em nova aba — use Ctrl+P para salvar como PDF', 'info')
   }
 
+  async function handleMemorialFormulas() {
+    if (!api.isElectron) {
+      mostrarMsg('Memorial com fórmulas só disponível no app instalado (Electron)', 'err')
+      return
+    }
+    const dados = prepararDadosMemorialFormulas(circuitos_calc, circuitos_raw as any, projeto as any)
+    if (dados.linhas.length === 0) {
+      mostrarMsg('Nenhum circuito dimensionado ainda', 'err')
+      return
+    }
+    const r = await api.exportMemorialFormulas(dados, projeto.nome)
+    if (r.ok) mostrarMsg(`Memorial com fórmulas salvo em: ${r.path}`, 'ok')
+    else mostrarMsg('Erro ao exportar: ' + (r.error || 'desconhecido'), 'err')
+  }
+
   function handleManualUsuario() {
     exportarManualUsuario(projeto as any, circuitos_calc)
     mostrarMsg('Manual do usuário gerado — NBR 5410 §6.1.8.3', 'info')
@@ -193,6 +209,11 @@ export function QDFL() {
             <div className="flabel" style={{ marginBottom: 8 }}>Documentos técnicos (PDF)</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button className="btn success" onClick={handleMemorial}>📄 Memorial Descritivo</button>
+              <button className="btn" style={{ background: 'var(--purple)', color: '#fff', borderColor: 'var(--purple)' }}
+                onClick={handleMemorialFormulas} disabled={!api.isElectron}
+                title={api.isElectron ? 'Excel com fórmulas de verdade — consulte ou altere qualquer célula, veja o cálculo recalcular' : 'Só disponível no app instalado'}>
+                🧮 Memorial com Fórmulas (2ª opinião)
+              </button>
               <button className="btn" style={{ background: 'var(--blue)', color: '#fff', borderColor: 'var(--blue)' }} onClick={handlePrancha}>
                 📋 Prancha (para impressão)
               </button>

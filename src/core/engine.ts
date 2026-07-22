@@ -293,6 +293,18 @@ export function dimensionarCircuito(e: CircuitInput): CircuitResult {
       r.iz_efetiva   = r.iz_nominal * r.ft * r.fa * fsolo * fHarmonica
       tentativas++
     }
+    // BUG CORRIGIDO: quando a tripartida força a seção a subir MAIS do
+    // que o laço de ΔU já tinha exigido, r.du_calc ficava PARADO no
+    // valor calculado para a seção menor anterior — nunca era
+    // recalculado com a seção final maior. Como seção maior sempre dá
+    // ΔU menor, isso fazia o app reportar um ΔU% PIOR do que o real
+    // (podendo até marcar "EXCEDE" um circuito que na seção final
+    // adotada estava, na verdade, conforme). Achado construindo a
+    // planilha de auditoria com fórmulas — o Excel usa a seção final
+    // corretamente, o valor armazenado aqui não usava.
+    if (tentativas > 0 && e.comprimento_m > 0) {
+      r.du_calc = calcDeltaU(r.ib, e.comprimento_m, sec, r.tensao_v, n_fases, e.material)
+    }
   }
 
   const sug = inferirCurva(e.tipo, e.descricao?.toLowerCase())
